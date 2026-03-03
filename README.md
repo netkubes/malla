@@ -24,30 +24,6 @@ Built on years of production experience running critical systems.
 - **Service lifecycle control** with admin and running statuses
 - **No lock-in** — integrates incrementally with your existing codebase
 
-```elixir
-defmodule MyService do
-  use Malla.Service, global: true
-
-  defcb greet(name) do
-    {:ok, "Hello, #{name}!"}
-  end
-end
-```
-
-## Installation
-
-Add `malla` to your dependencies in `mix.exs`:
-
-```elixir
-def deps do
-  [
-    {:malla, "~> 0.0.1"}
-  ]
-end
-```
-
-Requires Elixir 1.17+ and Erlang/OTP 26+.
-
 ## Documentation
 
 Full documentation is available on **[HexDocs](https://hexdocs.pm/malla)**.
@@ -80,6 +56,10 @@ Full documentation is available on **[HexDocs](https://hexdocs.pm/malla)**.
 | [Remote Calls](https://hexdocs.pm/malla/03-remote-calls.html) | Transparent RPC with failover |
 | [Tracing](https://hexdocs.pm/malla/01-tracing.html) | Instrumentation and observability |
 | [Plugin Development](https://hexdocs.pm/malla/13-plugin-development.html) | Creating custom plugins |
+
+## Part of the NetKubes Platform
+
+Malla is the foundation of **NetKubes**, a platform for building complex, distributed, production-ready Elixir applications. We will be releasing a series of plugins and tools covering deployment (Kubernetes and other platforms), runtime management, and common infrastructure needs. Malla works perfectly as a standalone framework — NetKubes plugins simply extend it when you need more.
 
 ## AI-Assisted Development
 
