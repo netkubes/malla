@@ -35,6 +35,10 @@ Malla is built on years of production experience running critical systems. This 
 - **Configuration Management**: Multi-layer configuration with deep merging.
 - **Storage**: ETS-based storage per service.
 
+## Part of the NetKubes Platform
+
+Malla is the foundation of **NetKubes**, a platform for building complex, distributed, production-ready Elixir applications. We will be releasing a series of plugins and tools covering deployment (Kubernetes and other platforms), runtime management, tracing, and common infrastructure needs. Malla works perfectly as a standalone framework — NetKubes plugins simply extend it when you need more.
+
 ## Architecture Overview
 
 ### Plugin System
