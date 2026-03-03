@@ -1,0 +1,352 @@
+# Getting Started with Malla
+
+```elixir
+Mix.install([
+  {:malla, path: Path.join(__DIR__, "..")}
+])
+```
+
+## Introduction
+
+Welcome to Malla! This tutorial will guide you through building distributed services with a plugin-based architecture. You'll learn how to:
+
+1. Create a simple service with an API
+2. Extract functionality into reusable plugins
+3. Compose plugins to modify behavior
+4. Dynamically reconfigure services at runtime
+
+Let's build a simple calculator service to demonstrate these concepts.
+
+## Part 1: Creating a Basic Service
+
+First, let's create a simple calculator service that can add numbers.
+
+```elixir
+defmodule Calculator do
+  use Malla.Service,
+    global: true,
+    vsn: "1.0.0"
+
+  # Public API - can be called remotely
+  def add(a, b) do
+    a + b
+  end
+
+  # Callback that participates in the plugin chain
+  defcb calculate(operation, a, b) do
+    case operation do
+      :add -> {:ok, a + b}
+      _ -> :cont  # Let other plugins handle it
+    end
+  end
+end
+
+# Start the service
+{:ok, _pid} = Calculator.start_link([])
+
+# Test the API
+IO.puts("2 + 3 = #{Calculator.add(2, 3)}")
+
+# Test the callback
+{:ok, result} = Calculator.calculate(:add, 5, 7)
+IO.puts("5 + 7 = #{result}")
+```
+
+Great! We have a working service. The `calculate/3` callback is special - it participates in a **callback chain** where plugins can intercept and modify behavior.
+
+## Part 2: Moving Functionality into a Plugin
+
+Now let's extract the addition logic into a reusable plugin. This makes it easier to share functionality across multiple services.
+
+```elixir
+defmodule AdditionPlugin do
+  use Malla.Plugin
+
+  # This callback will be part of the chain
+  defcb calculate(operation, a, b) do
+    case operation do
+      :add -> {:ok, a + b}
+      _ -> :cont  # Continue to next plugin
+    end
+  end
+end
+
+# Create a new calculator that uses the plugin
+defmodule CalculatorV2 do
+  use Malla.Service,
+    global: true,
+    plugins: [AdditionPlugin],
+    vsn: "2.0.0"
+
+  # The service doesn't need to implement calculate/3
+  # The plugin handles it!
+end
+
+# Start and test
+{:ok, _pid} = CalculatorV2.start_link([])
+{:ok, result} = CalculatorV2.calculate(:add, 10, 20)
+IO.puts("Using plugin: 10 + 20 = #{result}")
+```
+
+Notice how the service became simpler? The plugin now handles the calculation logic.
+
+## Part 3: Adding More Functionality with Another Plugin
+
+Let's add multiplication by creating another plugin. This demonstrates how plugins **compose** together.
+
+```elixir
+defmodule MultiplicationPlugin do
+  use Malla.Plugin
+
+  defcb calculate(operation, a, b) do
+    case operation do
+      :multiply -> {:ok, a * b}
+      _ -> :cont  # Let other plugins handle it
+    end
+  end
+end
+
+# Create a calculator with both plugins
+defmodule CalculatorV3 do
+  use Malla.Service,
+    global: true,
+    plugins: [
+      AdditionPlugin,
+      MultiplicationPlugin
+    ],
+    vsn: "3.0.0"
+end
+
+# Start and test both operations
+{:ok, _pid} = CalculatorV3.start_link([])
+
+{:ok, sum} = CalculatorV3.calculate(:add, 8, 4)
+IO.puts("8 + 4 = #{sum}")
+
+{:ok, product} = CalculatorV3.calculate(:multiply, 8, 4)
+IO.puts("8 × 4 = #{product}")
+```
+
+### How the Callback Chain Works
+
+When you call `CalculatorV3.calculate(:add, 8, 4)`, here's what happens:
+
+1. **CalculatorV3** checks first (top of chain) - returns `:cont`
+2. **MultiplicationPlugin** checks - operation is `:add`, returns `:cont`
+3. **AdditionPlugin** checks - operation is `:add`, returns `{:ok, 12}` ✓
+4. **Chain stops** - the result is returned
+
+The chain walks from top to bottom until a plugin returns something other than `:cont`.
+
+## Part 4: Enhancing Behavior with Plugin Wrapping
+
+Now let's add logging to all operations. We'll create a plugin that wraps around the others.
+
+```elixir
+defmodule LoggingPlugin do
+  use Malla.Plugin
+
+  defcb calculate(operation, a, b) do
+    IO.puts("🔢 Calculating: #{operation}(#{a}, #{b})")
+
+    # Continue to the next plugin and capture the result
+    result = :cont
+
+    case result do
+      {:ok, value} ->
+        IO.puts("✅ Result: #{value}")
+        {:ok, value}
+      error ->
+        IO.puts("❌ Error: #{inspect(error)}")
+        error
+    end
+  end
+end
+
+# Important: LoggingPlugin must come BEFORE the math plugins
+# to intercept calls first
+defmodule CalculatorV4 do
+  use Malla.Service,
+    global: true,
+    plugins: [
+      LoggingPlugin,
+      AdditionPlugin,
+      MultiplicationPlugin
+    ],
+    vsn: "4.0.0"
+end
+
+# Start and test - watch the logs!
+{:ok, _pid} = CalculatorV4.start_link([])
+{:ok, _result} = CalculatorV4.calculate(:multiply, 6, 7)
+```
+
+## Part 5: Runtime Reconfiguration
+
+One of Malla's powerful features is the ability to reconfigure services at runtime. Let's create a calculator that can enable/disable operations dynamically.
+
+```elixir
+defmodule ConfigurableAdditionPlugin do
+  use Malla.Plugin
+
+  defcb calculate(operation, a, b) do
+    # Get the service ID from process dictionary
+    srv_id = Malla.get_service_id!()
+
+    # Check if addition is enabled in config
+    config = Malla.Service.get_config(srv_id)
+    enabled = get_in(config, [:ConfigurableAdditionPlugin, :enabled]) != false
+
+    if enabled && operation == :add do
+      {:ok, a + b}
+    else
+      :cont
+    end
+  end
+end
+
+defmodule ConfigurableMultiplicationPlugin do
+  use Malla.Plugin
+
+  defcb calculate(operation, a, b) do
+    srv_id = Malla.get_service_id!()
+    config = Malla.Service.get_config(srv_id)
+    enabled = get_in(config, [:ConfigurableMultiplicationPlugin, :enabled]) != false
+
+    if enabled && operation == :multiply do
+      {:ok, a * b}
+    else
+      :cont
+    end
+  end
+end
+
+defmodule ConfigurableCalculator do
+  use Malla.Service,
+    global: true,
+    plugins: [
+      ConfigurableAdditionPlugin,
+      ConfigurableMultiplicationPlugin
+    ],
+    vsn: "5.0.0"
+
+  # Default config: all operations enabled
+  config ConfigurableAdditionPlugin, enabled: true
+  config ConfigurableMultiplicationPlugin, enabled: true
+end
+
+# Start with default config
+{:ok, pid} = ConfigurableCalculator.start_link([])
+IO.puts("\n--- All operations enabled ---")
+IO.inspect(ConfigurableCalculator.calculate(:add, 5, 3))
+IO.inspect(ConfigurableCalculator.calculate(:multiply, 5, 3))
+
+# Disable multiplication at runtime
+IO.puts("\n--- Disabling multiplication ---")
+Malla.Service.reconfigure(ConfigurableCalculator, %{
+  ConfigurableMultiplicationPlugin: [enabled: false]
+})
+
+Process.sleep(100)  # Give it a moment to reconfigure
+
+IO.inspect(ConfigurableCalculator.calculate(:add, 5, 3))
+# This will return :cont (no handler) since multiplication is disabled
+IO.inspect(ConfigurableCalculator.calculate(:multiply, 5, 3))
+
+# Re-enable multiplication
+IO.puts("\n--- Re-enabling multiplication ---")
+Malla.Service.reconfigure(ConfigurableCalculator, %{
+  ConfigurableMultiplicationPlugin: [enabled: true]
+})
+
+Process.sleep(100)
+
+IO.inspect(ConfigurableCalculator.calculate(:multiply, 5, 3))
+```
+
+## Part 6: Building a Complete Example
+
+Let's put it all together with a calculator that supports multiple operations, logging, and validation.
+
+```elixir
+defmodule ValidationPlugin do
+  use Malla.Plugin
+
+  defcb calculate(operation, a, b) do
+    cond do
+      not is_number(a) or not is_number(b) ->
+        {:error, :invalid_arguments}
+
+      operation == :divide and b == 0 ->
+        {:error, :division_by_zero}
+
+      true ->
+        :cont
+    end
+  end
+end
+
+defmodule DivisionPlugin do
+  use Malla.Plugin
+
+  defcb calculate(operation, a, b) do
+    case operation do
+      :divide -> {:ok, a / b}
+      _ -> :cont
+    end
+  end
+end
+
+defmodule FullCalculator do
+  use Malla.Service,
+    global: true,
+    plugins: [
+      ValidationPlugin,      # Validates first
+      LoggingPlugin,         # Logs the operation
+      AdditionPlugin,        # Math operations
+      MultiplicationPlugin,
+      DivisionPlugin
+    ],
+    vsn: "6.0.0"
+
+  # Helper function to make API cleaner
+  def add(a, b), do: calculate(:add, a, b)
+  def multiply(a, b), do: calculate(:multiply, a, b)
+  def divide(a, b), do: calculate(:divide, a, b)
+end
+
+# Start and test
+{:ok, _pid} = FullCalculator.start_link([])
+
+IO.puts("\n=== Testing Full Calculator ===")
+IO.inspect(FullCalculator.add(10, 5))
+IO.inspect(FullCalculator.multiply(10, 5))
+IO.inspect(FullCalculator.divide(10, 5))
+IO.inspect(FullCalculator.divide(10, 0))  # Error: division by zero
+IO.inspect(FullCalculator.add("not", "numbers"))  # Error: invalid arguments
+```
+
+## Key Takeaways
+
+1. **Services** are the main building blocks - they define what your system does
+2. **Plugins** are reusable pieces of functionality that can be composed together
+3. **Callbacks** (defined with `defcb`) form chains that execute top-to-bottom
+4. **Plugin order matters** - earlier plugins can intercept or wrap later ones
+5. **Return `:cont`** to continue the chain, or any other value to stop and return
+6. **Runtime reconfiguration** lets you change behavior without restarting
+
+## Next Steps
+
+Try experimenting with:
+
+- Adding subtraction and modulo operations
+- Creating a plugin that caches calculation results
+- Building a rate-limiting plugin
+- Making the calculator work across distributed nodes (add `global: true` and use `Malla.call`)
+
+For more advanced topics, check out:
+- The Malla guides in the `guides/` directory
+- The test files for real-world examples
+- The API documentation (`mix docs`)
+
+Happy coding! 🚀
