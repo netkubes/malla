@@ -1,3 +1,4 @@
+
 # Introduction to Malla
 
 Malla is a framework for developing distributed services in Elixir. It simplifies distributed service development through a plugin-based architecture with compile-time callback chaining, automatic service discovery across nodes, and minimal "magic" to keep systems understandable.
@@ -36,6 +37,8 @@ Malla is built on years of production experience running critical systems. This 
 - **Storage**: ETS-based storage per service.
 
 ## Part of the NetKubes Platform
+
+<img src="assets/logo.png" alt="Malla" width="200">
 
 Malla is the foundation of **NetKubes**, a platform for building complex, distributed, production-ready Elixir applications. We will be releasing a series of plugins and tools covering deployment (Kubernetes and other platforms), runtime management, tracing, and common infrastructure needs. Malla works perfectly as a standalone framework — NetKubes plugins simply extend it when you need more.
 

@@ -24,6 +24,8 @@ Built on years of production experience running critical systems.
 - **Service lifecycle control** with admin and running statuses
 - **No lock-in** — integrates incrementally with your existing codebase
 
+See our livebook's [Getting Started Tutorial](livebook/getting_started.livemd) and [Distributed Tutorial](livebook/distributed_tutorial.livemd)!
+
 ## Documentation
 
 Full documentation is available on **[HexDocs](https://hexdocs.pm/malla)**.
@@ -59,7 +61,7 @@ Full documentation is available on **[HexDocs](https://hexdocs.pm/malla)**.
 
 ## Part of the NetKubes Platform
 
-Malla is the foundation of **NetKubes**, a platform for building complex, distributed, production-ready Elixir applications. We will be releasing a series of plugins and tools covering deployment (Kubernetes and other platforms), runtime management, and common infrastructure needs. Malla works perfectly as a standalone framework — NetKubes plugins simply extend it when you need more.
+Malla is the foundation of **NetKubes**, a platform for building complex, distributed, production-ready Elixir applications. We will be releasing a series of plugins and tools covering deployment (Kubernetes and other platforms), runtime management, tracing, and common infrastructure needs. Malla works perfectly as a standalone framework — NetKubes plugins simply extend it when you need more.
 
 ## AI-Assisted Development
 
