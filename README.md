@@ -1,5 +1,9 @@
 # Malla
 
+[![Hex.pm](https://img.shields.io/hexpm/v/malla.svg)](https://hex.pm/packages/malla)
+[![Hex Docs](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/malla)
+[![License](https://img.shields.io/hexpm/l/malla.svg)](https://github.com/netkubes/malla/blob/main/LICENSE.md)
+
 Malla is a framework for developing distributed services in Elixir. It simplifies distributed service development through a plugin-based architecture with compile-time callback chaining, automatic service discovery across nodes, and minimal "magic" to keep systems understandable.
 
 ## Why Malla?
@@ -49,7 +53,7 @@ Add `malla` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:malla, "~> 0.1.0"}
+    {:malla, "~> 0.0.1"}
   ]
 end
 ```
@@ -115,19 +119,13 @@ Open these tutorials in [LiveBook](https://livebook.dev/) for an interactive, ha
 
 Malla's architecture centers on a sophisticated plugin system where behavior is composed through callback chains resolved at compile time:
 
-```
-Your Service Module (Top of chain - highest priority)
-    ↓ Custom business logic
-    ↓ Can override any plugin behavior
-    ↓
-Your Plugins (Middleware layer)
-    ↓ Authentication, logging, caching
-    ↓ Can modify, observe, or block calls
-    ↓
-Malla.Plugins.Base (Bottom of chain - default behavior)
-    • Always present
-    • Provides fallback implementations
-```
+| Layer | Role |
+|-------|------|
+| **Your Service Module** | Top of chain (highest priority). Custom business logic. Can override any plugin behavior. |
+| &darr; | |
+| **Your Plugins** | Middleware layer. Authentication, logging, caching. Can modify, observe, or block calls. |
+| &darr; | |
+| **Malla.Plugins.Base** | Bottom of chain (default behavior). Always present. Provides fallback implementations. |
 
 Key characteristics:
 - Service modules (using `Malla.Service`) are themselves plugins.
