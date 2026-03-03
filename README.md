@@ -24,7 +24,7 @@ Built on years of production experience running critical systems.
 - **Service lifecycle control** with admin and running statuses
 - **No lock-in** — integrates incrementally with your existing codebase
 
-See our livebook's [Getting Started Tutorial](livebook/getting_started.livemd) and [Distributed Tutorial](livebook/distributed_tutorial.livemd)!
+See our ivebook's [Getting Started Tutorial](https://hexdocs.pm/malla/getting_started.html) and [Distributed Tutorial](https://hexdocs.pm/malla/distributed_tutorial.html)!
 
 ## Documentation
 
@@ -36,8 +36,8 @@ Full documentation is available on **[HexDocs](https://hexdocs.pm/malla)**.
 |-------|-------------|
 | [Introduction](https://hexdocs.pm/malla/introduction.html) | Why Malla, core concepts, and key principles |
 | [Quick Start](https://hexdocs.pm/malla/02-quick-start.html) | Create your first service in minutes |
-| [Getting Started Tutorial](livebook/getting_started.livemd) | Interactive LiveBook tutorial |
-| [Distributed Tutorial](livebook/distributed_tutorial.livemd) | Multi-node LiveBook tutorial |
+| [Getting started tutorial](https://hexdocs.pm/malla/getting_started.html) | Interactive LiveBook tutorial |
+| [Distributed Tutorial](https://hexdocs.pm/malla/distributed_tutorial.html) | Multi-node LiveBook tutorial |
 
 ### Core Concepts
 
