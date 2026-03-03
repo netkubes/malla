@@ -24,7 +24,7 @@ Built on years of production experience running critical systems.
 - **Service lifecycle control** with admin and running statuses
 - **No lock-in** — integrates incrementally with your existing codebase
 
-See our ivebook's [Getting Started Tutorial](https://hexdocs.pm/malla/getting_started.html) and [Distributed Tutorial](https://hexdocs.pm/malla/distributed_tutorial.html)!
+**See our Livebook's [Getting Started Tutorial](https://hexdocs.pm/malla/getting_started.html) and [Distributed Tutorial](https://hexdocs.pm/malla/distributed_tutorial.html)!**
 
 ## Documentation
 
