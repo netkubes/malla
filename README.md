@@ -8,6 +8,14 @@ Malla is a framework for developing distributed services in Elixir. It simplifie
 
 **Not just for distributed systems** — even on a single node, Malla gives you plugin-based service management, runtime plugin control (add, remove, or reconfigure without restarting), lifecycle management, and built-in observability. Distribution is there when you need it.
 
+## Why Malla?
+
+- **Simplicity first** — straightforward, readable code over clever abstractions. Compile-time callback chains mean no runtime complexity.
+- **Safe evolution** — add or modify behavior through plugins without touching existing code. Deactivate problematic plugins on the fly without restarting.
+- **No lock-in** — integrates incrementally with your existing codebase. All plugins are optional. Start with a single service and expand gradually.
+
+Built on years of production experience running critical systems.
+
 ## At a Glance
 
 - **Plugin-based architecture** with compile-time callback chaining (zero runtime overhead)
