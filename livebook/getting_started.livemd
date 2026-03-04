@@ -1,9 +1,7 @@
 # Getting Started with Malla
 
 ```elixir
-Mix.install([
-  {:malla, path: Path.join(__DIR__, "..")}
-])
+Mix.install([:malla])
 ```
 
 ## Introduction
@@ -23,9 +21,7 @@ First, let's create a simple calculator service that can add numbers.
 
 ```elixir
 defmodule Calculator do
-  use Malla.Service,
-    global: true,
-    vsn: "1.0.0"
+  use Malla.Service
 
   # Public API - can be called remotely
   def add(a, b) do
@@ -33,12 +29,7 @@ defmodule Calculator do
   end
 
   # Callback that participates in the plugin chain
-  defcb calculate(operation, a, b) do
-    case operation do
-      :add -> {:ok, a + b}
-      _ -> :cont  # Let other plugins handle it
-    end
-  end
+  defcb calculate(:add, a, b), do: {:ok, a + b}
 end
 
 # Start the service
@@ -63,20 +54,15 @@ defmodule AdditionPlugin do
   use Malla.Plugin
 
   # This callback will be part of the chain
-  defcb calculate(operation, a, b) do
-    case operation do
-      :add -> {:ok, a + b}
-      _ -> :cont  # Continue to next plugin
-    end
-  end
+  defcb calculate(:add, a, b), do: {:ok, a + b}
+
+  # If we don't support this, let other plugins process it
+  defcb calculate(_, _, _), do: :cont
 end
 
 # Create a new calculator that uses the plugin
 defmodule CalculatorV2 do
-  use Malla.Service,
-    global: true,
-    plugins: [AdditionPlugin],
-    vsn: "2.0.0"
+  use Malla.Service, plugins: [AdditionPlugin]
 
   # The service doesn't need to implement calculate/3
   # The plugin handles it!
@@ -98,23 +84,17 @@ Let's add multiplication by creating another plugin. This demonstrates how plugi
 defmodule MultiplicationPlugin do
   use Malla.Plugin
 
-  defcb calculate(operation, a, b) do
-    case operation do
-      :multiply -> {:ok, a * b}
-      _ -> :cont  # Let other plugins handle it
-    end
-  end
+  defcb calculate(:multiply, a, b), do: {:ok, a * b}
+  defcb calculate(_, _, _), do: :cont
 end
 
 # Create a calculator with both plugins
 defmodule CalculatorV3 do
   use Malla.Service,
-    global: true,
     plugins: [
       AdditionPlugin,
       MultiplicationPlugin
-    ],
-    vsn: "3.0.0"
+    ]
 end
 
 # Start and test both operations
@@ -138,192 +118,184 @@ When you call `CalculatorV3.calculate(:add, 8, 4)`, here's what happens:
 
 The chain walks from top to bottom until a plugin returns something other than `:cont`.
 
-## Part 4: Enhancing Behavior with Plugin Wrapping
+## Part 4: Plugin Dependencies and Chain Ordering
 
-Now let's add logging to all operations. We'll create a plugin that wraps around the others.
+A plugin can declare dependencies on other plugins using `plugin_deps`. This has two effects:
+
+1. **Automatic inclusion** - dependent plugins are pulled in transitively, so the service only needs to list the top-level plugin.
+2. **Chain ordering** - the dependent plugin is placed **above** its dependencies in the callback chain, so it gets called first.
+
+Let's create a `LoggingPlugin` that depends on both math plugins and logs every operation to screen before letting them handle it.
 
 ```elixir
 defmodule LoggingPlugin do
-  use Malla.Plugin
+  use Malla.Plugin,
+    plugin_deps: [AdditionPlugin, MultiplicationPlugin]
 
   defcb calculate(operation, a, b) do
-    IO.puts("🔢 Calculating: #{operation}(#{a}, #{b})")
+    # This runs BEFORE the math plugins because LoggingPlugin
+    # is above them in the chain (it depends on them).
+    IO.puts(">> calculate(#{operation}, #{a}, #{b})")
 
-    # Continue to the next plugin and capture the result
-    result = :cont
-
-    case result do
-      {:ok, value} ->
-        IO.puts("✅ Result: #{value}")
-        {:ok, value}
-      error ->
-        IO.puts("❌ Error: #{inspect(error)}")
-        error
-    end
+    # Return :cont to let the math plugins handle the actual computation
+    :cont
   end
 end
 
-# Important: LoggingPlugin must come BEFORE the math plugins
-# to intercept calls first
+# We only need to list LoggingPlugin - its dependencies
+# (AdditionPlugin and MultiplicationPlugin) are included automatically.
 defmodule CalculatorV4 do
   use Malla.Service,
-    global: true,
-    plugins: [
-      LoggingPlugin,
-      AdditionPlugin,
-      MultiplicationPlugin
-    ],
-    vsn: "4.0.0"
+    plugins: [LoggingPlugin]
 end
 
 # Start and test - watch the logs!
 {:ok, _pid} = CalculatorV4.start_link([])
-{:ok, _result} = CalculatorV4.calculate(:multiply, 6, 7)
+
+{:ok, sum} = CalculatorV4.calculate(:add, 6, 7)
+IO.puts("= #{sum}\n")
+
+{:ok, product} = CalculatorV4.calculate(:multiply, 6, 7)
+IO.puts("= #{product}")
 ```
 
-## Part 5: Runtime Reconfiguration
+### Chain Order with Dependencies
 
-One of Malla's powerful features is the ability to reconfigure services at runtime. Let's create a calculator that can enable/disable operations dynamically.
+The chain for `CalculatorV4.calculate(:multiply, 6, 7)`:
+
+1. **CalculatorV4** (top) - no `defcb calculate`, returns `:cont`
+2. **LoggingPlugin** - prints `>> calculate(multiply, 6, 7)`, returns `:cont`
+3. **MultiplicationPlugin** - handles `:multiply`, returns `{:ok, 42}`
+4. **Chain stops** - the result is returned
+
+By declaring `plugin_deps`, we told Malla that LoggingPlugin sits above the math plugins. No need to manually order the `plugins:` list.
+
+## Part 5: Extending Behavior Without Modifying Existing Plugins
+
+A key benefit of the plugin architecture is that you can add new behavior **without touching existing code**. Let's create a `FloatPlugin` that converts all results to floats. It depends on `LoggingPlugin`, so it sits above everything in the chain.
 
 ```elixir
-defmodule ConfigurableAdditionPlugin do
-  use Malla.Plugin
+defmodule FloatPlugin do
+  use Malla.Plugin,
+    plugin_deps: [LoggingPlugin, MultiplicationPlugin, AdditionPlugin]
 
   defcb calculate(operation, a, b) do
-    # Get the service ID from process dictionary
-    srv_id = Malla.get_service_id!()
-
-    # Check if addition is enabled in config
-    config = Malla.Service.get_config(srv_id)
-    enabled = get_in(config, [:ConfigurableAdditionPlugin, :enabled]) != false
-
-    if enabled && operation == :add do
-      {:ok, a + b}
-    else
-      :cont
-    end
+    # Convert arguments to floats before passing them down the chain
+    {:cont, [operation, a / 1, b / 1]}
   end
 end
 
-defmodule ConfigurableMultiplicationPlugin do
-  use Malla.Plugin
-
-  defcb calculate(operation, a, b) do
-    srv_id = Malla.get_service_id!()
-    config = Malla.Service.get_config(srv_id)
-    enabled = get_in(config, [:ConfigurableMultiplicationPlugin, :enabled]) != false
-
-    if enabled && operation == :multiply do
-      {:ok, a * b}
-    else
-      :cont
-    end
-  end
-end
-
-defmodule ConfigurableCalculator do
+# FloatPlugin depends on LoggingPlugin, which depends on both math plugins.
+# All four plugins are included automatically.
+defmodule CalculatorV4b do
   use Malla.Service,
-    global: true,
-    plugins: [
-      ConfigurableAdditionPlugin,
-      ConfigurableMultiplicationPlugin
-    ],
-    vsn: "5.0.0"
-
-  # Default config: all operations enabled
-  config ConfigurableAdditionPlugin, enabled: true
-  config ConfigurableMultiplicationPlugin, enabled: true
+    plugins: [FloatPlugin]
 end
 
-# Start with default config
-{:ok, pid} = ConfigurableCalculator.start_link([])
-IO.puts("\n--- All operations enabled ---")
-IO.inspect(ConfigurableCalculator.calculate(:add, 5, 3))
-IO.inspect(ConfigurableCalculator.calculate(:multiply, 5, 3))
+{:ok, _pid} = CalculatorV4b.start_link([])
 
-# Disable multiplication at runtime
-IO.puts("\n--- Disabling multiplication ---")
-Malla.Service.reconfigure(ConfigurableCalculator, %{
-  ConfigurableMultiplicationPlugin: [enabled: false]
-})
+{:ok, sum} = CalculatorV4b.calculate(:add, 6, 7)
+IO.puts("= #{sum}")
+# => 13.0 (float!)
 
-Process.sleep(100)  # Give it a moment to reconfigure
+{:ok, product} = CalculatorV4b.calculate(:multiply, 6, 7)
+IO.puts("= #{product}")
+# => 42.0 (float!)
+```
 
-IO.inspect(ConfigurableCalculator.calculate(:add, 5, 3))
-# This will return :cont (no handler) since multiplication is disabled
-IO.inspect(ConfigurableCalculator.calculate(:multiply, 5, 3))
+Notice that we didn't modify `AdditionPlugin`, `MultiplicationPlugin`, or `LoggingPlugin`. FloatPlugin uses `{:cont, [operation, a / 1, b / 1]}` to pass **modified arguments** down the chain, converting integers to floats before the math plugins see them. The existing plugins work unchanged - they just receive floats instead of integers.
 
-# Re-enable multiplication
-IO.puts("\n--- Re-enabling multiplication ---")
-Malla.Service.reconfigure(ConfigurableCalculator, %{
-  ConfigurableMultiplicationPlugin: [enabled: true]
-})
+## Part 6: Adding and Removing Plugins at Runtime
 
+Malla can add or remove plugins from a running service without stopping it. The service restarts automatically with the updated plugin chain. This is useful for debugging in production, feature rollouts, or disabling problematic plugins.
+
+Let's start a calculator with `FloatPlugin` and then remove it at runtime.
+
+```elixir
+defmodule CalculatorV6 do
+  use Malla.Service,
+    plugins: [FloatPlugin, MultiplicationPlugin, AdditionPlugin]
+end
+
+{:ok, _pid} = CalculatorV6.start_link([])
+
+IO.puts("--- With FloatPlugin ---")
+IO.inspect(CalculatorV6.calculate(:add, 6, 7))
+# => {:ok, 13.0}
+
+# Remove FloatPlugin at runtime
+IO.puts("\n--- Removing FloatPlugin ---")
+Malla.Service.del_plugin(CalculatorV6, FloatPlugin)
 Process.sleep(100)
 
-IO.inspect(ConfigurableCalculator.calculate(:multiply, 5, 3))
+IO.inspect(CalculatorV6.calculate(:add, 6, 7))
+# => {:ok, 13}
+
+# Add it back
+IO.puts("\n--- Adding FloatPlugin back ---")
+Malla.Service.add_plugin(CalculatorV6, FloatPlugin)
+Process.sleep(100)
+
+IO.inspect(CalculatorV6.calculate(:add, 6, 7))
+# => {:ok, 13.0}
 ```
 
-## Part 6: Building a Complete Example
+**No code changes, no recompilation, no downtime**. The callback chain is rebuilt and the service restarts with the new plugin configuration automatically.
 
-Let's put it all together with a calculator that supports multiple operations, logging, and validation.
+## Part 7: Runtime Configuration and Reconfiguration
+
+Malla services can be configured through `use Malla.Service` and reconfigured at runtime with `Malla.Service.reconfigure/2`. By convention, configuration is organized as keyword lists under keys named after each plugin or the service itself.
+
+Plugins can read service configuration inside callbacks using `Malla.get_service_id!/0` and `srv_id.get_config/0`.
 
 ```elixir
-defmodule ValidationPlugin do
-  use Malla.Plugin
+defmodule RoundingPlugin do
+  use Malla.Plugin,
+    plugin_deps: [AdditionPlugin, MultiplicationPlugin]
+
+  # Handle merging our config key when reconfigure/2 is called.
+  # Without this, updates are ignored (the default returns :ok = "skip").
+  @impl true
+  def plugin_config_merge(_srv_id, config, update) do
+    case update[:rounding_plugin] do
+      nil -> :ok
+      my_update ->
+        my_config = config |> Keyword.get(:rounding_plugin, %{}) |> Map.merge(my_update)
+        {:ok, Keyword.put(config, :rounding_plugin, my_config)}
+    end
+  end
 
   defcb calculate(operation, a, b) do
-    cond do
-      not is_number(a) or not is_number(b) ->
-        {:error, :invalid_arguments}
+    srv_id = Malla.get_service_id!()
+    config = srv_id.get_config()
+    decimals = get_in(config, [:rounding_plugin, :decimals]) || 2
 
-      operation == :divide and b == 0 ->
-        {:error, :division_by_zero}
-
-      true ->
-        :cont
-    end
+    # Modify the arguments by rounding, then continue the chain
+    {:cont, [operation, Float.round(a / 1, decimals), Float.round(b / 1, decimals)]}
   end
 end
 
-defmodule DivisionPlugin do
-  use Malla.Plugin
-
-  defcb calculate(operation, a, b) do
-    case operation do
-      :divide -> {:ok, a / b}
-      _ -> :cont
-    end
-  end
-end
-
-defmodule FullCalculator do
+defmodule CalculatorV7 do
   use Malla.Service,
-    global: true,
-    plugins: [
-      ValidationPlugin,      # Validates first
-      LoggingPlugin,         # Logs the operation
-      AdditionPlugin,        # Math operations
-      MultiplicationPlugin,
-      DivisionPlugin
-    ],
-    vsn: "6.0.0"
-
-  # Helper function to make API cleaner
-  def add(a, b), do: calculate(:add, a, b)
-  def multiply(a, b), do: calculate(:multiply, a, b)
-  def divide(a, b), do: calculate(:divide, a, b)
+    plugins: [RoundingPlugin],
+    # Default config: round to 2 decimal places (use a map)
+    rounding_plugin: %{decimals: 2}
 end
 
-# Start and test
-{:ok, _pid} = FullCalculator.start_link([])
+{:ok, _pid} = CalculatorV7.start_link([])
 
-IO.puts("\n=== Testing Full Calculator ===")
-IO.inspect(FullCalculator.add(10, 5))
-IO.inspect(FullCalculator.multiply(10, 5))
-IO.inspect(FullCalculator.divide(10, 5))
-IO.inspect(FullCalculator.divide(10, 0))  # Error: division by zero
-IO.inspect(FullCalculator.add("not", "numbers"))  # Error: invalid arguments
+IO.puts("--- Rounding to 2 decimals (default) ---")
+IO.inspect(CalculatorV7.calculate(:add, 1.005, 2.006))
+
+# Change rounding precision at runtime (use a map)
+IO.puts("\n--- Reconfiguring to 4 decimals ---")
+Malla.Service.reconfigure(CalculatorV7, rounding_plugin: %{decimals: 4})
+Process.sleep(100)
+
+IO.inspect(CalculatorV7.calculate(:add, 1.005, 2.006))
+
+# You can also pass config at startup via start_link
+# CalculatorV7.start_link(rounding_plugin: %{decimals: 0})
 ```
 
 ## Key Takeaways
@@ -331,22 +303,11 @@ IO.inspect(FullCalculator.add("not", "numbers"))  # Error: invalid arguments
 1. **Services** are the main building blocks - they define what your system does
 2. **Plugins** are reusable pieces of functionality that can be composed together
 3. **Callbacks** (defined with `defcb`) form chains that execute top-to-bottom
-4. **Plugin order matters** - earlier plugins can intercept or wrap later ones
+4. **Plugin dependencies control chain order** - dependent plugins run before their dependencies
 5. **Return `:cont`** to continue the chain, or any other value to stop and return
-6. **Runtime reconfiguration** lets you change behavior without restarting
+6. **Configuration** - any non-reserved key in `use Malla.Service` becomes config, readable with `get_config/0` and changeable with `reconfigure/2`
+7. **Plugins can be added/removed at runtime** with `add_plugin/2` and `del_plugin/2`
 
 ## Next Steps
 
-Try experimenting with:
-
-- Adding subtraction and modulo operations
-- Creating a plugin that caches calculation results
-- Building a rate-limiting plugin
-- Making the calculator work across distributed nodes (add `global: true` and use `Malla.call`)
-
-For more advanced topics, check out:
-- The Malla guides in the `guides/` directory
-- The test files for real-world examples
-- The API documentation (`mix docs`)
-
-Happy coding! 🚀
+This tutorial only scratches the surface of what Malla offers. Check out the [guides](introduction.html) and API documentation for the full picture: service lifecycle, distributed service discovery, remote calls, request handling, tracing, and more.

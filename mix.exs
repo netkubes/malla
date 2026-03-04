@@ -55,6 +55,8 @@ defmodule Malla.MixProject do
       "guides/02-quick-start.md": [title: "Quick Start"],
       "livebook/getting_started.livemd": [title: "Getting Started Tutorial"],
       "livebook/distributed_tutorial.livemd": [title: "Distributed Services Tutorial"],
+      "livebook/distributed_storage.livemd": [title: "Distributed Tutorial — Storage Node"],
+      "livebook/distributed_client.livemd": [title: "Distributed Tutorial — Client Node"],
       "guides/03-services.md": [title: "Services"],
       "guides/04-plugins.md": [title: "Plugins"],
       "guides/05-callbacks.md": [title: "Callbacks"],

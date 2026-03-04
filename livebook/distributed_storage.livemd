@@ -1,0 +1,105 @@
+# Distributed Tutorial — Storage Node
+
+## Step 1: Get your node info
+
+Verify you're attached to the correct node.
+
+```elixir
+IO.puts("Node:   #{node()}")
+IO.puts("Cookie: #{Node.get_cookie()}")
+```
+
+## Step 2: Create a Storage Service
+
+A simple key-value storage service, discoverable across the cluster.
+
+```elixir
+defmodule StorageService do
+  use Malla.Service,
+    global: true
+
+  def put(key, value), do: Malla.Service.put(__MODULE__, key, value)
+
+  def get(key) do
+    case Malla.Service.get(__MODULE__, key) do
+      nil -> {:error, :not_found}
+      value -> {:ok, value}
+    end
+  end
+
+  def delete(key), do: Malla.Service.del(__MODULE__, key)
+end
+
+{:ok, _pid} = StorageService.start_link([])
+
+IO.puts("StorageService is running on #{node()}")
+IO.puts("Waiting for connections from other nodes...")
+```
+
+## Step 3: Test Local Storage
+
+Verify the service works locally before trying distributed calls.
+
+```elixir
+StorageService.put(:user_1, %{name: "Alice", age: 30})
+StorageService.put(:user_2, %{name: "Bob", age: 25})
+StorageService.put(:config, %{debug: true, timeout: 5000})
+
+{:ok, user} = StorageService.get(:user_1)
+IO.puts("Retrieved user: #{inspect(user)}")
+```
+
+
+**Keep this session running** and switch to the Client notebook!
+
+## Add a Log Service
+
+Once you have the client connected, come back here and run this to enable this new service.
+It will be available immediately at client.
+
+First, a plugin that adds timestamp formatting to any service that includes it:
+
+```elixir
+defmodule TimestampPlugin do
+  use Malla.Plugin
+
+  defcb format_entry(message) do
+    timestamp = DateTime.utc_now() |> DateTime.to_string()
+    "[#{timestamp}] #{message}"
+  end
+end
+```
+
+Now the LogService uses `defcb` for its remote-callable functions and includes the plugin:
+
+```elixir
+defmodule LogService do
+  use Malla.Service,
+    global: true,
+    plugins: [TimestampPlugin]
+
+  defcb log(message) do
+    entry = format_entry(message)
+    IO.puts("LOG: #{entry}")
+
+    logs = case StorageService.get(:logs) do
+      {:ok, existing} -> existing
+      {:error, :not_found} -> []
+    end
+
+    StorageService.put(:logs, [entry | logs])
+
+    :ok
+  end
+
+  defcb get_recent_logs(count \\ 5) do
+    case StorageService.get(:logs) do
+      {:ok, logs} -> Enum.take(logs, count)
+      {:error, :not_found} -> []
+    end
+  end
+end
+
+{:ok, _pid} = LogService.start_link([])
+IO.puts("LogService is running on #{node()}")
+```

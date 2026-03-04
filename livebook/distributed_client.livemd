@@ -1,0 +1,151 @@
+# Distributed Tutorial — Client Node
+
+## Step 1: Connect to the Storage Node
+
+```elixir
+storage_node = :"storage@127.0.0.1"
+
+case Node.connect(storage_node) do
+  true ->
+    IO.puts("Connected to #{storage_node}")
+    IO.puts("Connected nodes: #{inspect(Node.list())}")
+
+  false ->
+    IO.puts("Failed to connect to #{storage_node}")
+    IO.puts("Make sure the Storage node IEx session is running")
+end
+```
+
+## Step 2: Make Remote Calls
+
+Call the storage service running on the other node.
+
+```elixir
+import Malla, only: [call: 1]
+
+# Store data on the remote node
+call StorageService.put(:from_client, %{message: "Hello from client node!"})
+call StorageService.put(:timestamp, DateTime.utc_now())
+
+IO.puts("Data stored on remote node")
+
+# Retrieve data from the remote node
+{:ok, data} = call StorageService.get(:from_client)
+IO.puts("Retrieved from remote: #{inspect(data)}")
+```
+
+## Step 3: Understanding Remote Calls
+
+The `call` macro is syntactic sugar for `Malla.remote/4`:
+
+```elixir
+# These are equivalent:
+# call StorageService.get(:user_1)
+# Malla.remote(StorageService, :get, [:user_1])
+
+# Let's see where the service is actually running
+nodes = Malla.Node.get_nodes(StorageService)
+IO.puts("StorageService is available on: #{inspect(nodes)}")
+
+# Make an explicit remote call with options
+result =
+  Malla.remote(
+    StorageService,
+    :get,
+    [:user_1],
+    timeout: 5000
+  )
+
+IO.puts("Remote call result: #{inspect(result)}")
+```
+
+## Part 4: New service
+
+First, run the "Add a Log Service" section in the Storage notebook.
+Service will be discovered immediately by this node.
+Then run this:
+
+```elixir
+import Malla, only: [call: 1]
+
+# Use the LogService running on the storage node
+call LogService.log("Hello from client node!")
+call LogService.log("Testing distributed logging")
+
+# Retrieve logs
+logs = call LogService.get_recent_logs(10)
+IO.puts("\nRecent logs:")
+Enum.each(logs, &IO.puts/1)
+```
+
+## Part 5: Virtual Modules
+
+When Malla discovers a remote service, it creates a **virtual module** — a local proxy that forwards calls to the remote node automatically. This means you can call remote services directly, without using the `call` macro:
+
+```elixir
+# No import, no `call` macro — just a regular function call.
+# Malla's virtual module routes it to the storage node transparently.
+logs = LogService.get_recent_logs(10)
+IO.puts("Logs via virtual module:")
+Enum.each(logs, &IO.puts/1)
+```
+
+See documentation about downsides of using this "virtual" call.
+
+## Summary
+
+```elixir
+IO.puts("""
+
+Congratulations! You've successfully:
+
+1. Set up a distributed Erlang cluster with two nodes
+2. Created a service on one node (StorageService)
+3. Made remote calls from another node
+4. Experienced automatic service discovery
+5. Built bidirectional service communication
+
+Key Concepts:
+
+- global: true
+  Makes services discoverable across the cluster via :pg process groups
+
+- Malla.call / Malla.remote
+  Transparently route function calls to the node running the service
+
+- Service Discovery
+  Malla.Node automatically finds services every 10 seconds
+  Local node is preferred, remote nodes are randomized for load balancing
+
+- Virtual Modules
+  When a remote service is detected, Malla creates a local proxy module
+
+- Failover
+  If a node fails, calls automatically route to other available nodes
+
+Next steps: try starting a third node, stopping the storage node
+to see failover, or using Malla.Node.call_cb_all/3 to broadcast.
+""")
+```
+
+## Troubleshooting
+
+### Connection Problems
+
+```elixir
+IO.puts("This node: #{node()}")
+IO.puts("Connected nodes: #{inspect(Node.list())}")
+IO.puts("Cookie: #{Node.get_cookie()}")
+```
+
+### Service Discovery Issues
+
+```elixir
+Process.sleep(11_000)
+
+nodes_with_storage = Malla.Node.get_nodes(StorageService)
+IO.puts("StorageService found on: #{inspect(nodes_with_storage)}")
+
+members = :pg.get_members(Malla.Services2, StorageService)
+IO.puts("Process group members: #{inspect(members)}")
+```

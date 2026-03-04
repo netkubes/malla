@@ -1,7 +1,7 @@
 
 # Introduction to Malla
 
-Malla is a framework for developing distributed services in Elixir. It simplifies distributed service development through a plugin-based architecture with compile-time callback chaining, automatic service discovery across nodes, and minimal "magic" to keep systems understandable.
+Malla is a framework for developing **distributed services** in Elixir. It simplifies distributed service development through a **plugin-based** architecture with compile-time callback chaining, automatic **service discovery** across nodes, and **minimal "magic"** to keep systems understandable.
 
 ## Not Just for Distributed Systems
 
@@ -9,13 +9,13 @@ While Malla excels at distributed computing, you don't need a cluster to benefit
 
 ## Why Malla?
 
-Developing distributed services can be challenging. Malla simplifies the process by handling much of the boilerplate while giving you the flexibility to implement custom behaviors and use any libraries without enforced constraints.
+Developing distributed services can be challenging. Malla simplifies the process by **handling much of the boilerplate** while giving you the flexibility to implement custom behaviors and use any libraries **without enforced constraints**.
 
-Malla is built on years of production experience running critical systems. This real-world battle testing has shaped its design to prioritize what matters most: simplicity, safe evolution, and practical flexibility.
+Malla is built on **years of production experience** running critical systems. This real-world battle testing has shaped its design to prioritize what matters most: simplicity, safe evolution, and practical flexibility.
 
 ### Key Principles
 
-- **Simplicity and Readability First**: Production experience has taught us that keeping code simple and easy to understand is critical for long-term maintainability. Malla prioritizes straightforward, readable code over clever abstractions. The plugin architecture promotes focused code where each plugin handles a single concern. Compile-time callback chains mean no runtime complexity.
+- **Simplicity and Readability First**: Production experience has taught us that keeping code simple and easy to understand is critical for long-term maintainability. Malla prioritizes straightforward, **readable code over clever abstractions**. The plugin architecture promotes focused code where each plugin handles a single concern. Compile-time callback chains mean no runtime complexity.
 - **Safe Evolution Through Plugins**: Add new functionality or modify behavior without touching existing code. Plugins compose transparently, following the [Open/Closed Principle](https://en.wikipedia.org/wiki/Open%E2%80%93closed_principle). This reduces risk in production deployments—deactivate problematic plugins on the fly without requiring a full system restart.
 - **No Technology Lock-In**: Malla has little friction with other libraries and integrates with your existing codebase incrementally. All built-in and future released plugins are optional. Use Malla for only part of your system—start with a single distributed service and expand gradually.
 
@@ -26,7 +26,7 @@ Malla is built on years of production experience running critical systems. This 
 - **Distributed RPC**: Call service functions on remote nodes transparently.
 - **Service Lifecycle Management**: Control service state with admin statuses (`:active`, `:pause`, `:inactive`) and monitor their running status.
 - **Dynamic Runtime Control**: Modify service behavior and plugin configurations in real-time. Deactivate problematic plugins on the fly without requiring a full system restart.
-- **Extensive Documentation** and **Extensive Test Coverage**: Every major feature is documented and included in a test.
+- **Extensive Documentation** and **Test Coverage**: Every major feature is documented and included in a test.
 
 ### Optional Included Utilities
 
