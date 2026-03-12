@@ -51,14 +51,16 @@ defmodule Malla.Service.Build do
     # Create a unique module name by concatenating the service ID with 'MallaDispatch'.
     mod_name = Module.concat(srv_id, MallaDispatch)
 
-    # Purge the old module version if it exists to avoid redefinition warnings
-    :code.purge(mod_name)
+    # Purge the old module version if it exists to avoid redefinition warnings.
+    # delete marks the current version as 'old', then purge removes the old version.
     :code.delete(mod_name)
+    :code.purge(mod_name)
 
     # Dynamically create and compile the module from the generated AST, obtaining its binary representation.
-    # We need to ensure debug_info is enabled to include abstract code in the binary
+    # We need to ensure debug_info is enabled to include abstract code in the binary.
+    # Suppress the "redefining module" warning since runtime recompilation is intentional.
     old_opts = Code.compiler_options()
-    _ = Code.compiler_options(debug_info: true)
+    _ = Code.compiler_options(debug_info: true, ignore_module_conflict: true)
     {:module, _, bin, _} = Module.create(mod_name, contents, Macro.Env.location(__ENV__))
     _ = Code.compiler_options(old_opts)
 
