@@ -31,7 +31,6 @@ defmodule MyPlugin do
   use Malla.Plugin,
     plugin_deps: [AnotherPlugin]
   
-  # Lifecycle callback - configure the plugin
   @impl true
   def plugin_config(srv_id, config) do
     # Validate or modify the service configuration
@@ -39,7 +38,6 @@ defmodule MyPlugin do
     {:ok, validated_config}
   end
   
-  # Lifecycle callback - start supervised children
   @impl true
   def plugin_start(srv_id, config) do
     # Return child specs for the service's supervisor

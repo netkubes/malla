@@ -96,7 +96,7 @@ For a comprehensive guide to reconfiguration, including adding/removing plugins 
 
 ### 3. Pause and Resume
 - [`Malla.Service.set_admin_status(MyService, :pause)`](`Malla.Service.set_admin_status/2`): The service's running status becomes `:paused`. It will stop accepting new work, but its supervised children continue to run.
-- `Malla.Service.set_admin_status(MyService, :active)`: The service resumes normal operation.
+- [`Malla.Service.set_admin_status(MyService, :active)`](`Malla.Service.set_admin_status/2`): The service resumes normal operation.
 
 ### 4. Shutdown Sequence
 When a service is stopped (either via [`MyService.stop/0`](`c:Malla.Service.Interface.stop/0`) or by its supervisor):

@@ -45,7 +45,7 @@ See the [Callbacks guide](05-callbacks.md) for a detailed explanation.
 You can configure a service via options in the `use Malla.Service` macro:
 
 - `:global` - (boolean) If `true`, the service is registered cluster-wide and can be called from any node. Defaults to `false`.
-- `:plugins` - (list of modules) A list of plugins to include in the service's callback chain.
+- `:plugins` - (list of modules) A list of plugins to include in the service's callback chain. See [Plugins](04-plugins.md).
 - `:vsn` - (string) The service version, used for compatibility checking.
 - `:otp_app` - (atom) Load additional configuration from the specified OTP application's environment.
 - Any other key-value pairs are added to the service's initial configuration. See the [Configuration guide](07-configuration.md).

@@ -14,7 +14,7 @@ Add `malla` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:malla, "~> 0.1.0"}
+    {:malla, ">= 0.0.0"}
   ]
 end
 ```
@@ -30,7 +30,7 @@ defmodule MyService do
   use Malla.Service, 
     global: true
     
-  def fun1(a) do
+  defcb fun1(a) do
     {:ok, %{you_said: a}}
   end
 end
@@ -63,35 +63,36 @@ Now, let's see Malla's distributed features in action.
 Open a terminal and start the first node named `first`:
 
 ```bash
-iex --sname first --cookie malla_dev -S mix
+iex --name first@127.0.0.1 --cookie malla -S mix
 ```
 
 In the IEx session, start your service:
 
 ```elixir
-iex(first@hostname)> MyService.start_link()
+iex(first@127.0.0.1)> MyService.start_link()
 {:ok, #PID<0.123.0>}
 
-iex(first@hostname)> Node.self()
-:"first@hostname"
+iex(first@127.0.0.1)> Node.self()
+:"first@127.0.0.1"
 ```
 
 ### Start the Second Node
 
-Open a second terminal and start another node named `second`:
+Open a second terminal and start another node named `second`, but on an application 
+not having module "MyService"
 
 ```bash
-iex --sname second --cookie malla_dev -S mix
+iex --name second@127.0.0.1 --cookie malla -S mix
 ```
 
 In this second session, connect to the first node:
 
 ```elixir
-iex(second@hostname)> Node.connect(:"first@hostname")
+iex(second@127.0.0.1)> Node.connect(:"first@127.0.0.1")
 true
 
-iex(second@hostname)> Node.list()
-[:"first@hostname"]
+iex(second@127.0.0.1)> Node.list()
+[:"first@127.0.0.1"]
 ```
 
 ### Call the Remote Service
@@ -99,19 +100,19 @@ iex(second@hostname)> Node.list()
 From the second node, you can now call the service that is running on the first node, and Malla will handle the remote communication transparently:
 
 ```elixir
-iex(second@hostname)> Malla.remote(MyService, :fun1, ["hello from second node"])
+iex(second@127.0.0.1)> Malla.remote(MyService, :fun1, ["hello from second node"])
 {:ok, %{you_said: "hello from second node"}}
 
 # you can also use the helper macros
-iex(second@hostname)> require Malla
-:ok
+iex(second@127.0.0.1)> require Malla
+Malla
 
-iex(second@hostname)> Malla.call Myservice.fun1("hellow again")
+iex(second@127.0.0.1)> Malla.call MyService.fun1("hellow again")
 {:ok, %{you_said: "hello again"}}
 
 # or use the virtual node feature 
 # make sure you don't declare module `MyService` on this second node
-iex(second@hostname)> MyService.fun1("funny")
+iex(second@127.0.0.1)> MyService.fun1("funny")
 {:ok, %{you_said: "funny"}}
 ```
 

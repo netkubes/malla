@@ -2,7 +2,8 @@
 
 For Malla services to be distributed, the underlying Erlang nodes must be connected to form a cluster. This guide explains how to connect nodes and provides recommendations for production deployments.
 
-Malla can work with any method of connecting Erlang nodes, as long as each node can "see" the others. The `Malla.Cluster` module provides utilities to simplify this process, especially in containerized environments like Kubernetes.
+Malla can work with any method of connecting Erlang nodes, as long as each node can "see" the others. The `Malla.Cluster` module provides utilities to simplify this process, especially in containerized environments like Kubernetes,
+but you can use any other method like popular [libcluster](https://hex.pm/packages/libcluster) library.
 
 ## Basic Node Connection
 
