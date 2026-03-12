@@ -73,6 +73,18 @@ children = [
 ]
 ```
 
+You can also specify the plugin list at runtime, replacing the compile-time plugins entirely:
+
+```elixir
+# Override plugins and provide their configuration
+MyService.start_link(
+  plugins: [MyPlugin, AnotherPlugin],
+  my_plugin: [timeout: 15000]
+)
+```
+
+The `plugins:` key is extracted before configuration merging. The plugin chain is rebuilt first, then the remaining configuration keys are processed through the new plugin chain's `plugin_config_merge/3` and `plugin_config/2` callbacks.
+
 ## Runtime Reconfiguration
 
 Services can be reconfigured at runtime without stopping them. This allows you to update configuration dynamically in response to changing requirements.

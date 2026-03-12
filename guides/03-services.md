@@ -45,7 +45,7 @@ See the [Callbacks guide](05-callbacks.md) for a detailed explanation.
 You can configure a service via options in the `use Malla.Service` macro:
 
 - `:global` - (boolean) If `true`, the service is registered cluster-wide and can be called from any node. Defaults to `false`.
-- `:plugins` - (list of modules) A list of plugins to include in the service's callback chain. See [Plugins](04-plugins.md).
+- `:plugins` - (list of modules) A list of plugins to include in the service's callback chain. Can also be provided at runtime via `start_link/1`. See [Plugins](04-plugins.md).
 - `:vsn` - (string) The service version, used for compatibility checking.
 - `:otp_app` - (atom) Load additional configuration from the specified OTP application's environment.
 - Any other key-value pairs are added to the service's initial configuration. See the [Configuration guide](07-configuration.md).
@@ -70,6 +70,9 @@ You can start a service directly or as part of a supervisor tree.
 # Start with runtime configuration
 {:ok, pid} = MyService.start_link(key: :value)
 
+# Start with runtime plugins (replaces compile-time plugin list)
+{:ok, pid} = MyService.start_link(plugins: [SomePlugin, AnotherPlugin])
+
 # Start under a supervisor
 children = [
   {MyService, key: :value}
@@ -77,6 +80,24 @@ children = [
 
 Supervisor.start_link(children, strategy: :one_for_one)
 ```
+
+### Runtime Plugin Specification
+
+You can pass `plugins:` to `start_link/1` to override the compile-time plugin list. This is useful for escript/CLI deployments where plugin selection needs to happen at runtime via configuration files rather than at compile time.
+
+```elixir
+# Define a service with no plugins at compile time
+defmodule MyService do
+  use Malla.Service,
+    global: true
+end
+
+# At runtime, choose plugins based on configuration
+plugins = load_plugins_from_config()
+{:ok, pid} = MyService.start_link(plugins: plugins, my_plugin: [timeout: 5000])
+```
+
+The plugin chain is fully rebuilt at startup: dependencies are resolved, callbacks are regenerated, and the dispatch module is recompiled. See [Reconfiguration](07a-reconfiguration.md) for more details.
 
 ## Service Storage
 

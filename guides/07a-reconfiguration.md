@@ -135,6 +135,35 @@ end
 - Supervised child specifications
 - Plugin additions/removals
 
+## Runtime Plugin Specification at Startup
+
+You can specify the plugin list at startup by passing `plugins:` to `start_link/1`. This replaces the compile-time plugin list entirely and is processed before any configuration merging:
+
+```elixir
+# Service with no compile-time plugins
+defmodule MyService do
+  use Malla.Service, global: true
+end
+
+# At runtime, load plugins from a config file and start with them
+plugins = Application.get_env(:my_app, :plugins, [])
+{:ok, pid} = MyService.start_link(plugins: plugins, my_setting: :value)
+```
+
+This uses the same infrastructure as `add_plugin/3` and `del_plugin/2` — the plugin chain is rebuilt via dependency resolution, callbacks are regenerated, and the dispatch module is recompiled at startup. The remaining configuration keys (everything except `plugins:`) are then processed through the new plugin chain.
+
+You can also pass `plugins:` to `Malla.Service.reconfigure/2` to replace the plugin list on an already-running service:
+
+```elixir
+Malla.Service.reconfigure(MyService, plugins: [NewPlugin], new_plugin: [key: :value])
+```
+
+### Use Cases
+
+- **Escript/CLI deployments**: Plugin selection from config files instead of compile-time declarations
+- **Testing**: Try different plugin combinations without recompiling
+- **Multi-tenant services**: Different plugin sets per service instance
+
 ## Runtime Plugin Management
 
 One of Malla's **most powerful features** is the ability to add or remove plugins at runtime **without touching your code**. This is a game-changer for production operations:

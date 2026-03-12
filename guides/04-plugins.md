@@ -137,9 +137,28 @@ Each plugin in the chain can control the flow with its return value:
 
 See the [Callbacks guide](05-callbacks.md) for a more detailed explanation.
 
-## Plugins reconfiguration
+## Runtime Plugin Specification
 
-Plugins can be added and removed **at runtime**. See [Reconfiguration](07a-reconfiguration.md).
+Plugins are typically declared at compile time via `use Malla.Service, plugins: [...]`. However, you can also specify plugins **at startup** by passing `plugins:` to `start_link/1`:
+
+```elixir
+# Service declared with no plugins
+defmodule MyService do
+  use Malla.Service, global: true
+end
+
+# Plugins chosen at runtime
+{:ok, pid} = MyService.start_link(plugins: [MyPlugin, AnotherPlugin])
+```
+
+When runtime plugins are provided, they **replace** the compile-time plugin list entirely. The plugin chain is rebuilt with full dependency resolution, callback generation, and dispatch module recompilation.
+
+This is especially useful for:
+- **Escript/CLI deployments** where plugin selection comes from config files
+- **Testing** different plugin combinations without recompiling
+- **Multi-tenant services** that need different plugin sets per instance
+
+Plugins can also be added and removed from already-running services. See [Reconfiguration](07a-reconfiguration.md).
 
 ## Lifecycle Callbacks
 

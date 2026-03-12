@@ -121,6 +121,9 @@ defmodule Malla.Service.Server do
     %Service{id: ^srv_id, class: class, global: global, start_paused: paused} = service
     # wait_for_services(service.wait_for_services, 30)
 
+    # Extract runtime plugins before processing config
+    {runtime_plugins, update} = Keyword.pop(update, :plugins)
+
     if global do
       :ok = :pg.join(Malla.Services2, srv_id, self())
       :ok = :pg.join(Malla.Services2, :all, self())
@@ -141,6 +144,19 @@ defmodule Malla.Service.Server do
       last_status_time: System.os_time(:millisecond),
       service: service
     }
+
+    # If runtime plugins provided, rebuild the plugin chain
+    state =
+      case runtime_plugins do
+        nil ->
+          state
+
+        plugins when is_list(plugins) ->
+          case do_update_plugin_chain(plugins, state) do
+            {:ok, state} -> state
+            {:error, error} -> raise "Failed to set runtime plugins: #{inspect(error)}"
+          end
+      end
 
     # we first apply otp_app config, if present
     # then we apply on top this update
@@ -373,7 +389,24 @@ defmodule Malla.Service.Server do
   end
 
   defp do_reconfigure(%State{} = state, update) do
-    %State{id: srv_id, service: %Service{} = service} = state
+    %State{id: srv_id} = state
+
+    # Extract runtime plugins before checking invalid opts
+    {runtime_plugins, update} = Keyword.pop(update, :plugins)
+
+    state =
+      case runtime_plugins do
+        nil ->
+          state
+
+        plugins when is_list(plugins) ->
+          case do_update_plugin_chain(plugins, state) do
+            {:ok, state} -> state
+            {:error, error} -> raise "Failed to set runtime plugins: #{inspect(error)}"
+          end
+      end
+
+    %State{service: %Service{} = service} = state
 
     with :ok <- config_invalid_opts(update),
          {:ok, config} <-
@@ -388,7 +421,7 @@ defmodule Malla.Service.Server do
   end
 
   defp config_invalid_opts(config) do
-    invalid = [:otp_app, :class, :vsn, :global, :paused, :plugins]
+    invalid = [:otp_app, :class, :vsn, :global, :paused]
 
     case Enum.find(config, fn {key, _val} -> if key in invalid, do: key end) do
       nil -> :ok
