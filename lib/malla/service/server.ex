@@ -432,9 +432,9 @@ defmodule Malla.Service.Server do
   @spec call_plugin_config_merge([term], Malla.id(), keyword, keyword) ::
           {:ok, keyword} | {:error, term}
 
-  defp call_plugin_config_merge([], _srv_id, config, _update) do
-    # No plugins left, leave last config
-    {:ok, config}
+  defp call_plugin_config_merge([], _srv_id, config, update) do
+    # No plugins handled merge, deep-merge by default
+    {:ok, Keyword.merge(config, update)}
   end
 
   defp call_plugin_config_merge([plugin | rest], srv_id, config, update) do

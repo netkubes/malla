@@ -72,8 +72,8 @@ defmodule Service2.Test do
       assert %{a: 1, b: 2} == Keyword.get(config, :plugin2_1)
       assert %{a: 2, b: 3} == Keyword.get(config, :plugin2_2)
       assert %{a: 3, b: 4} == Keyword.get(config, :service2)
-      # z was added, but no plugin used it, so it is ignored
-      assert nil == Keyword.get(config, :z)
+      # z was passed at start_link and deep-merged into config
+      assert 1 == Keyword.get(config, :z)
 
       assert ^pid = Process.whereis(Service2)
       {:error, {:already_started, ^pid}} = Service2.start_link()
