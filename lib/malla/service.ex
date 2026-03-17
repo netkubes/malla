@@ -665,6 +665,7 @@ defmodule Malla.Service do
 
       defmodule MallaDispatch do
         @moduledoc false
+        @dialyzer [:no_match, :no_fail_call]
         [_ | mods] = Module.split(__MODULE__) |> Enum.reverse()
         srv_id = Enum.reverse(mods) |> Module.concat()
         @service Module.get_attribute(srv_id, :service)
