@@ -62,10 +62,10 @@ defmodule Service2.Test do
     test "service starts and registers correctly" do
       clear_chains()
       {:ok, pid} = Service2.start_link(plugin2_2: %{a: 2}, z: 1)
-      # config was accessible during service_init (before plugin_config runs)
-      init_config = Malla.Config.get(Service2, :init_config)
-      assert is_list(init_config)
-      assert Keyword.has_key?(init_config, :plugin2_1)
+      # config was passed to service_config (before plugin_config runs)
+      sc_config = Malla.Config.get(Service2, :service_config_config)
+      assert is_list(sc_config)
+      assert Keyword.has_key?(sc_config, :plugin2_1)
 
       # check config order was correct
       assert [Service2, Plugin2_1, Plugin2_2] == Malla.Config.get(Service2, :config_chain)
@@ -368,7 +368,7 @@ defmodule Service2.Test do
     Malla.Config.del(Service2, :stop_chain)
     Malla.Config.del(Service2, :config_merge_chain)
     Malla.Config.del(Service2, :updated_chain)
-    Malla.Config.del(Service2, :init_config)
+    Malla.Config.del(Service2, :service_config_config)
   end
 
   defp get_callbacks(plugin), do: Malla.Service.get_callbacks(Service2, plugin)

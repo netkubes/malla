@@ -357,7 +357,7 @@ defmodule Malla.Service.Server do
   ## Internal
   ## ===================================================================
 
-  # Initial config: merge all config layers, call service_init, then plugin_config
+  # Initial config: merge all config layers, call service_config, then plugin_config
   defp init_config(state, update) do
     %State{id: srv_id} = state
 
@@ -366,7 +366,7 @@ defmodule Malla.Service.Server do
     with {:ok, %State{} = state} <- merge_config_only(state, update) do
       :persistent_term.put(key, state.service.config)
 
-      with :ok <- call_service_init(srv_id),
+      with {:ok, %State{} = state} <- call_service_config(state),
            {:ok, service} <- call_plugin_config(state.service.plugin_chain, state.service) do
         hash = :erlang.phash2(service)
         :persistent_term.put(key, service.config)
@@ -375,10 +375,13 @@ defmodule Malla.Service.Server do
     end
   end
 
-  defp call_service_init(srv_id) do
-    case srv_id.service_init() do
-      :ok -> :ok
-      error -> {:error, {:service_init_failed, error}}
+  defp call_service_config(%State{id: srv_id, service: service} = state) do
+    case srv_id.service_config(service.config) do
+      {:ok, config} when is_list(config) ->
+        {:ok, %State{state | service: %{service | config: config}}}
+
+      {:error, _} = error ->
+        error
     end
   end
 
