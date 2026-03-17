@@ -158,6 +158,15 @@ defmodule Malla.Service.Server do
           end
       end
 
+    # Call service_init callback before configuration phase
+    case srv_id.service_init() do
+      :ok ->
+        :ok
+
+      error ->
+        raise "service_init failed for '#{srv_id}': #{inspect(error)}"
+    end
+
     # we first apply otp_app config, if present
     # then we apply on top this update
     case merge_config(state, update) do

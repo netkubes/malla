@@ -36,6 +36,7 @@ defmodule Malla.Plugins.Base do
   @type config :: map
 
   @optional_callbacks [
+    service_init: 0,
     service_status_changed: 1,
     service_is_ready?: 0,
     service_drain: 0,
@@ -44,28 +45,26 @@ defmodule Malla.Plugins.Base do
     malla_authorize: 3
   ]
 
-  # ## ===================================================================
-  # ## Default implementation
-  # ## ===================================================================
-
-  # @impl true
-  # def plugin_config(_id, _config, _service), do: :ok
-
-  # @impl true
-  # def plugin_start(_id, _config, _service), do: :ok
-
-  # @impl true
-  # def plugin_stop(_id, _config, _service), do: :ok
-
-  # @impl true
-  # def plugin_updated(_id, _old_config, _new_config, _service), do: :ok
-
   @type cont :: Malla.cont()
   @type user_state :: map
 
   ## ===================================================================
   ## Service Server Callbacks
   ## ===================================================================
+
+  @doc """
+  Called during service initialization, before the configuration phase.
+
+  This callback is invoked once when the service starts, before `plugin_config/2`
+  is called. It allows plugins to set up state or provide information that
+  will be needed during configuration.
+
+  Return `:ok` (or `:cont`) to continue initialization, or any other value
+  to abort the init process.
+  """
+
+  @callback service_init() :: :ok | term
+  defcb service_init(), do: :ok
 
   @doc """
   Called when the service status changes.
