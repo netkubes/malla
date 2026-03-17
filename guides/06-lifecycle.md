@@ -34,6 +34,7 @@ You can monitor the running status using `Malla.Service.get_status/1`.
 flowchart TD
     START([START])
     INIT[Initialization<br/>Create ETS table]
+    SERVICE_INIT["🔔 service_init/0<br/>defcb callback chain"]
     CONFIG[Configuration Phase<br/>plugin_config/2 TOP → DOWN<br/>Service → Plugin1 → Plugin2 → Base]
     STARTING[":starting<br/>🔔 service_status_changed/1"]
     PLUGIN_START[Start Phase<br/>plugin_start/2 BOTTOM → UP<br/>Base → Plugin2 → Plugin1 → Service]
@@ -50,7 +51,9 @@ flowchart TD
     FAILED[":failed<br/>🔔 service_status_changed/1"]
     
     START --> INIT
-    INIT --> CONFIG
+    INIT --> SERVICE_INIT
+    SERVICE_INIT --> CONFIG
+    SERVICE_INIT -.->|error| FAILED
     CONFIG --> STARTING
     STARTING --> PLUGIN_START
     PLUGIN_START --> RUNNING
@@ -81,9 +84,10 @@ flowchart TD
 When [`MyService.start_link/1`](`c:Malla.Service.Interface.start_link/1`) is called (either directly or by a supervisor):
 
 1.  **Initialization**: An ETS table for service-specific storage is created.
-2.  **Configuration Phase** (Top-down): The `c:Malla.Plugin.plugin_config/2` callback is invoked for each plugin, starting from the service module and moving down the dependency chain. Each plugin can validate and modify the configuration for the plugins that depend on it.
-3.  **Start Phase** (Bottom-up): The `c:Malla.Plugin.plugin_start/2` callback is invoked for each plugin, starting from the lowest-level dependency (`Malla.Plugins.Base`) and moving up to the service module. Each plugin can return a list of child specs to be started under the service's dedicated supervisor.
-4.  **Running**: Once all plugins have started successfully, the service's running status is set to `:running`.
+2.  **Service Init**: The `c:Malla.Plugins.Base.service_init/0` callback is invoked through the callback chain. This allows plugins to set up state or provide information needed during the configuration phase. If any plugin returns a value other than `:ok`, the init process is aborted.
+3.  **Configuration Phase** (Top-down): The `c:Malla.Plugin.plugin_config/2` callback is invoked for each plugin, starting from the service module and moving down the dependency chain. Each plugin can validate and modify the configuration for the plugins that depend on it.
+4.  **Start Phase** (Bottom-up): The `c:Malla.Plugin.plugin_start/2` callback is invoked for each plugin, starting from the lowest-level dependency (`Malla.Plugins.Base`) and moving up to the service module. Each plugin can return a list of child specs to be started under the service's dedicated supervisor.
+5.  **Running**: Once all plugins have started successfully, the service's running status is set to `:running`.
 
 ### 2. Reconfiguration
 You can update a service's configuration at runtime by calling [`Malla.Service.reconfigure(MyService, new_config)`](`Malla.Service.reconfigure/2`). This process involves two callbacks:
@@ -287,6 +291,7 @@ These callbacks are defined with `defcb` and participate in the callback chain:
 
 | Callback | Chain Order | Trigger | Purpose |
 | :--- | :--- | :--- | :--- |
+| `c:Malla.Plugins.Base.service_init/0` | Top → Bottom | Startup (before configuration) | Set up state or provide information before the configuration phase. Return `:ok` to continue, any other value aborts init. |
 | `c:Malla.Plugins.Base.service_status_changed/1` | Top → Bottom | Status changes | React to running status changes (`:starting`, `:running`, `:paused`, `:stopped`, `:failed`). Always return `:cont`. |
 | `c:Malla.Plugins.Base.service_is_ready?/0` | Top → Bottom | `Malla.Service.is_ready?/1` | Check if service is ready to accept work. Return `:cont` if ready, `false` if not. Used for health checks. |
 | `c:Malla.Plugins.Base.service_drain/0` | Top → Bottom | `Malla.Service.drain/1` | Prepare for graceful shutdown. Return `:cont` when fully drained, `false` if still has work. Can be retried. |
