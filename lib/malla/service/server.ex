@@ -158,18 +158,9 @@ defmodule Malla.Service.Server do
           end
       end
 
-    # Call service_init callback before configuration phase
-    case srv_id.service_init() do
-      :ok ->
-        :ok
-
-      error ->
-        raise "service_init failed for '#{srv_id}': #{inspect(error)}"
-    end
-
     # we first apply otp_app config, if present
     # then we apply on top this update
-    case merge_config(state, update) do
+    case init_config(state, update) do
       {:ok, state} ->
         values = %{
           id: srv_id,
@@ -366,12 +357,82 @@ defmodule Malla.Service.Server do
   ## Internal
   ## ===================================================================
 
+  # Initial config: merge all config layers, call service_init, then plugin_config
+  defp init_config(state, update) do
+    %State{id: srv_id} = state
+
+    with {:ok, %State{} = state} <- merge_config_only(state, update),
+         :ok <- call_service_init(srv_id),
+         {:ok, service} <- call_plugin_config(state.service.plugin_chain, state.service) do
+      hash = :erlang.phash2(service)
+      key = srv_id.__service__(:config_key)
+      :persistent_term.put(key, service.config)
+      {:ok, %State{state | service: service, hash: hash}}
+    end
+  end
+
+  defp call_service_init(srv_id) do
+    case srv_id.service_init() do
+      :ok -> :ok
+      error -> {:error, {:service_init_failed, error}}
+    end
+  end
+
+  # Merge config layers without calling plugin_config
+  defp merge_config_only(state, update) do
+    case Keyword.get(state.service.config, :otp_app) do
+      nil ->
+        msg(state, "launch reconfig: #{inspect(update)}") |> Logger.debug()
+        do_merge_only(state, update)
+
+      app ->
+        app_update = Application.get_env(app, state.id, [])
+        msg(state, "launch otp_app reconfig: #{inspect(app_update)}") |> Logger.info()
+
+        case do_merge_only(state, app_update) do
+          {:ok, state} ->
+            msg(state, "launch reconfig: #{inspect(update)}") |> Logger.debug()
+            do_merge_only(state, update)
+
+          {:error, error} ->
+            {:error, error}
+        end
+    end
+  end
+
+  defp do_merge_only(%State{} = state, update) do
+    %State{id: srv_id} = state
+
+    {runtime_plugins, update} = Keyword.pop(update, :plugins)
+
+    state =
+      case runtime_plugins do
+        nil ->
+          state
+
+        plugins when is_list(plugins) ->
+          case do_update_plugin_chain(plugins, state) do
+            {:ok, state} -> state
+            {:error, error} -> raise "Failed to set runtime plugins: #{inspect(error)}"
+          end
+      end
+
+    %State{service: %Service{} = service} = state
+
+    with :ok <- config_invalid_opts(update),
+         {:ok, config} <-
+           call_plugin_config_merge(service.plugin_chain, srv_id, service.config, update) do
+      service = %Service{service | config: config}
+      {:ok, %State{state | service: service}}
+    end
+  end
+
   # we first apply reconfig over otp_app, if present in config
   # then we reapply with the included update
   defp merge_config(state, update) do
     case Keyword.get(state.service.config, :otp_app) do
       nil ->
-        msg(state, "launch reconfig: #{inspect(update)}") |> Logger.info()
+        msg(state, "launch reconfig: #{inspect(update)}") |> Logger.debug()
         do_reconfigure(state, update)
 
       app ->
@@ -380,7 +441,7 @@ defmodule Malla.Service.Server do
 
         case do_reconfigure(state, app_update) do
           {:ok, state} ->
-            msg(state, "launch reconfig: #{inspect(update)}") |> Logger.info()
+            msg(state, "launch reconfig: #{inspect(update)}") |> Logger.debug()
 
             case do_reconfigure(state, update) do
               {:ok, state} ->
@@ -478,6 +539,9 @@ defmodule Malla.Service.Server do
 
       {:ok, config} when is_list(config) ->
         call_plugin_config(rest, %Service{service | config: config})
+
+      {:ok, config} when is_map(config) ->
+        {:error, :plugin_config_invalid_return}
 
       {:error, error} ->
         {:error, error}
