@@ -361,13 +361,17 @@ defmodule Malla.Service.Server do
   defp init_config(state, update) do
     %State{id: srv_id} = state
 
-    with {:ok, %State{} = state} <- merge_config_only(state, update),
-         :ok <- call_service_init(srv_id),
-         {:ok, service} <- call_plugin_config(state.service.plugin_chain, state.service) do
-      hash = :erlang.phash2(service)
-      key = srv_id.__service__(:config_key)
-      :persistent_term.put(key, service.config)
-      {:ok, %State{state | service: service, hash: hash}}
+    key = srv_id.__service__(:config_key)
+
+    with {:ok, %State{} = state} <- merge_config_only(state, update) do
+      :persistent_term.put(key, state.service.config)
+
+      with :ok <- call_service_init(srv_id),
+           {:ok, service} <- call_plugin_config(state.service.plugin_chain, state.service) do
+        hash = :erlang.phash2(service)
+        :persistent_term.put(key, service.config)
+        {:ok, %State{state | service: service, hash: hash}}
+      end
     end
   end
 

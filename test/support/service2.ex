@@ -62,6 +62,12 @@ defmodule Service2 do
   # This implementation logs the status change and continues the chain,
   # allowing plugins to also monitor status changes.
   #
+  defcb service_init() do
+    config = Malla.Service.get_config(Service2)
+    Malla.Config.put(Service2, :init_config, config)
+    :cont
+  end
+
   defcb service_status_changed(_status) do
     # IO.puts("STATUS: #{inspect(status)}")
     # let next plugin be notified

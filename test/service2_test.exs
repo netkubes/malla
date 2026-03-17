@@ -62,6 +62,12 @@ defmodule Service2.Test do
     test "service starts and registers correctly" do
       clear_chains()
       {:ok, pid} = Service2.start_link(plugin2_2: %{a: 2}, z: 1)
+      # config was accessible during service_init
+      init_config = Malla.Config.get(Service2, :init_config)
+      assert is_list(init_config)
+      assert %{a: 1} == Keyword.get(init_config, :plugin2_1)
+      assert 1 == Keyword.get(init_config, :z)
+
       # check config order was correct
       assert [Service2, Plugin2_1, Plugin2_2] == Malla.Config.get(Service2, :config_chain)
       # check config content (a from service, b from start_link, plugin1_added from Plugin2_1)
