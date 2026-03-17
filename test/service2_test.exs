@@ -66,7 +66,8 @@ defmodule Service2.Test do
       assert [Service2, Plugin2_1, Plugin2_2] == Malla.Config.get(Service2, :config_chain)
       # check config content (a from service, b from start_link, plugin1_added from Plugin2_1)
       config = Service2.get_config()
-      # IO.puts("#{inspect(config)}")
+      # also available via the helper
+      assert config == Malla.Service.get_config(Service2)
 
       # plugins updated the config
       assert %{a: 1, b: 2} == Keyword.get(config, :plugin2_1)

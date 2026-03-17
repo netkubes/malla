@@ -145,6 +145,16 @@ defmodule Malla.Service do
   on service status changes.
   """
 
+  @spec get_config(Malla.id()) :: keyword() | :unknown
+  def get_config(srv_id) do
+    if is_pid(Process.whereis(srv_id)) do
+      key = srv_id.__service__(:config_key)
+      :persistent_term.get(key, :unknown)
+    else
+      :unknown
+    end
+  end
+
   @spec get_status(Malla.id()) :: running_status | :unknown
   def get_status(srv_id) do
     if is_pid(Process.whereis(srv_id)) do
