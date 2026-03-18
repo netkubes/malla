@@ -389,16 +389,16 @@ defmodule Malla.Service.Server do
   defp merge_config_only(state, update) do
     case Keyword.get(state.service.config, :otp_app) do
       nil ->
-        msg(state, "launch reconfig: #{inspect(update)}") |> Logger.debug()
+        # msg(state, "init config: #{inspect(update)}") |> Logger.debug()
         do_merge_only(state, update)
 
       app ->
         app_update = Application.get_env(app, state.id, [])
-        msg(state, "launch otp_app reconfig: #{inspect(app_update)}") |> Logger.info()
+        # msg(state, "init otp_app config: #{inspect(app_update)}") |> Logger.info()
 
         case do_merge_only(state, app_update) do
           {:ok, state} ->
-            msg(state, "launch reconfig: #{inspect(update)}") |> Logger.debug()
+            # msg(state, "init config: #{inspect(update)}") |> Logger.debug()
             do_merge_only(state, update)
 
           {:error, error} ->
