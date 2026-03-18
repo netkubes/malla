@@ -170,7 +170,7 @@ defmodule Malla.Service.Server do
 
         _ref1 = Malla.Registry.store(__MODULE__, values)
         _ref2 = Malla.Registry.store({__MODULE__, srv_id}, {class, state.hash})
-        msg(state, "server started") |> Logger.info()
+        log(state, :info, "server started")
         send(self(), :timed_check_status)
         {:ok, state}
 
@@ -297,13 +297,13 @@ defmodule Malla.Service.Server do
             {:noreply, state}
 
           {:error, error} ->
-            msg(state, "error starting plugins: #{inspect(error)}") |> Logger.warning()
+            log(state, :warning, "error starting plugins: #{inspect(error)}")
             state = stop_plugins(state)
             {:noreply, update_status(state, {:error, error})}
         end
 
       {_pid, _opts} ->
-        msg(state, plugin, "Not restaring in #{status} status") |> Logger.notice()
+        log(state, :notice, plugin, "Not restaring in #{status} status")
         {:noreply, state}
     end
   end
@@ -330,7 +330,7 @@ defmodule Malla.Service.Server do
         {:noreply, state}
 
       plugin ->
-        msg(state, plugin, "children sup has failed (#{inspect(reason)})") |> Logger.warning()
+        log(state, :warning, plugin, "children sup has failed (#{inspect(reason)})")
         plugins = Map.put(state.plugins, plugin, nil)
 
         state =
@@ -343,13 +343,13 @@ defmodule Malla.Service.Server do
   def handle_info({:EXIT, _pid, _}, state), do: {:noreply, state}
 
   def handle_info(msg, state) do
-    msg(state, "received unexpected info #{inspect(msg)}") |> Logger.info()
+    log(state, :info, "received unexpected info #{inspect(msg)}")
     {:noreply, state}
   end
 
   @impl true
   def terminate(reason, state) do
-    msg(state, "is stopping, reason: #{inspect(reason)}") |> Logger.notice()
+    log(state, :notice, "is stopping, reason: #{inspect(reason)}")
     stop_plugins(state)
   end
 
@@ -389,16 +389,16 @@ defmodule Malla.Service.Server do
   defp merge_config_only(state, update) do
     case Keyword.get(state.service.config, :otp_app) do
       nil ->
-        # msg(state, "init config: #{inspect(update)}") |> Logger.debug()
+        log(state, :debug, "init config: #{inspect(update)}")
         do_merge_only(state, update)
 
       app ->
         app_update = Application.get_env(app, state.id, [])
-        # msg(state, "init otp_app config: #{inspect(app_update)}") |> Logger.info()
+        log(state, :info, "init otp_app config: #{inspect(app_update)}")
 
         case do_merge_only(state, app_update) do
           {:ok, state} ->
-            # msg(state, "init config: #{inspect(update)}") |> Logger.debug()
+            log(state, :debug, "init config: #{inspect(update)}")
             do_merge_only(state, update)
 
           {:error, error} ->
@@ -439,20 +439,20 @@ defmodule Malla.Service.Server do
   defp merge_config(state, update) do
     case Keyword.get(state.service.config, :otp_app) do
       nil ->
-        msg(state, "launch reconfig: #{inspect(update)}") |> Logger.debug()
+        log(state, :debug, "launch reconfig: #{inspect(update)}")
         do_reconfigure(state, update)
 
       app ->
         app_update = Application.get_env(app, state.id, [])
-        msg(state, "launch otp_app reconfig: #{inspect(app_update)}") |> Logger.info()
+        log(state, :info, "launch otp_app reconfig: #{inspect(app_update)}")
 
         case do_reconfigure(state, app_update) do
           {:ok, state} ->
-            msg(state, "launch reconfig: #{inspect(update)}") |> Logger.debug()
+            log(state, :debug, "launch reconfig: #{inspect(update)}")
 
             case do_reconfigure(state, update) do
               {:ok, state} ->
-                msg(state, "Final config is: #{inspect(state.service.config)}") |> Logger.notice()
+                log(state, :notice, "Final config is: #{inspect(state.service.config)}")
                 {:ok, state}
 
               {:error, error} ->
@@ -498,7 +498,7 @@ defmodule Malla.Service.Server do
   end
 
   defp config_invalid_opts(config) do
-    invalid = [:otp_app, :class, :vsn, :global, :paused]
+    invalid = [:otp_app, :class, :vsn, :global, :paused, :silent]
 
     case Enum.find(config, fn {key, _val} -> if key in invalid, do: key end) do
       nil -> :ok
@@ -597,7 +597,7 @@ defmodule Malla.Service.Server do
         _updated_state = update_status(state, :running)
 
       {:error, error} ->
-        msg(state, "error starting plugins: #{inspect(error)}") |> Logger.warning()
+        log(state, :warning, "error starting plugins: #{inspect(error)}")
         _stopped_state = stop_plugins(state)
         _updated_state = update_status(state, {:error, error})
     end
@@ -623,7 +623,7 @@ defmodule Malla.Service.Server do
             state
 
           {:error, error} ->
-            msg(state, "error starting new plugins: #{inspect(error)}") |> Logger.warning()
+            log(state, :warning, "error starting new plugins: #{inspect(error)}")
             update_status(state, {:error, error})
         end
     end
@@ -682,15 +682,14 @@ defmodule Malla.Service.Server do
                 {:ok, {pid, opts}}
 
               {:error, error} ->
-                msg(state, plugin, "Could not start child supervisor: #{inspect(error)}")
-                |> Logger.warning()
+                log(state, :warning, plugin, "Could not start child supervisor: #{inspect(error)}")
 
                 {:error, :child_sup_error}
             end
         end
 
       {:error, error} ->
-        msg(state, plugin, "start error: #{inspect(error)}") |> Logger.warning()
+        log(state, :warning, plugin, "start error: #{inspect(error)}")
         {:error, error}
     end
   end
@@ -719,7 +718,7 @@ defmodule Malla.Service.Server do
         :ok
 
       {:error, error} ->
-        msg(state, plugin, "Error stopping plugin: #{inspect(error)}") |> Logger.warning()
+        log(state, :warning, plugin, "Error stopping plugin: #{inspect(error)}")
     end
 
     case Map.get(state.plugins, plugin) do
@@ -739,7 +738,7 @@ defmodule Malla.Service.Server do
         state
 
       _ ->
-        msg(state, "Removing plugins: #{inspect(to_remove)}") |> Logger.notice()
+        log(state, :notice, "Removing plugins: #{inspect(to_remove)}")
         %State{plugins: plugins} = state = stop_plugins(state, to_remove)
         %State{state | plugins: Map.drop(plugins, to_remove)}
     end
@@ -748,7 +747,7 @@ defmodule Malla.Service.Server do
   @spec update_status(%State{}, {:error, term()} | running_status()) :: %State{}
 
   defp update_status(%State{} = state, {:error, error}) do
-    msg(state, "status is 'failed': #{inspect(error)}") |> Logger.warning()
+    log(state, :warning, "status is 'failed': #{inspect(error)}")
     now = System.os_time(:millisecond)
 
     %State{
@@ -767,8 +766,7 @@ defmodule Malla.Service.Server do
         state
 
       old_status ->
-        msg(state, "status updated '#{old_status}' -> '#{new_status}'")
-        |> Logger.notice()
+        log(state, :notice, "status updated '#{old_status}' -> '#{new_status}'")
 
         now = System.os_time(:millisecond)
 
@@ -828,6 +826,18 @@ defmodule Malla.Service.Server do
   defp msg(state, plugin, text),
     do: "Service #{inspect(state.id)} (#{inspect(plugin)}): " <> text
 
+  defp log(state, level, text) do
+    unless state.service.silent and level not in [:warning, :error] do
+      Logger.log(level, msg(state, text))
+    end
+  end
+
+  defp log(state, level, plugin, text) do
+    unless state.service.silent and level not in [:warning, :error] do
+      Logger.log(level, msg(state, plugin, text))
+    end
+  end
+
   @spec do_update_plugins(term(), %State{}) :: {:reply, :ok | {:error, term()}, %State{}}
 
   defp do_update_plugins(plugins, %State{} = state) do
@@ -856,7 +866,7 @@ defmodule Malla.Service.Server do
       {:ok, %State{state | service: service}}
     rescue
       e ->
-        msg(state, "Error updating plugins: #{inspect(e)}") |> Logger.warning()
+        log(state, :warning, "Error updating plugins: #{inspect(e)}")
         {:error, e}
     end
   end

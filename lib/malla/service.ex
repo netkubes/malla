@@ -61,6 +61,8 @@ defmodule Malla.Service do
             global: boolean,
             # if true, service starts in 'paused' state and no children supervisors are started yet
             start_paused: boolean,
+            # if true, suppress messages to console about service start/stop/reconfigure
+            silent: boolean,
             wait_for_services: [id],
             # Chain of plugins, in the order they will be called (first top-level)
             plugin_chain: [module],
@@ -76,6 +78,7 @@ defmodule Malla.Service do
             plugins: [],
             global: false,
             start_paused: false,
+            silent: false,
             wait_for_services: [],
             plugin_chain: [],
             config: [],
@@ -424,6 +427,7 @@ defmodule Malla.Service do
     * `:otp_app` - If provided, configuration will be fetched from application config and merged.
     * `:global` - Whether the service is globally visible.
     * `:paused` - Whether to start in paused state.
+    * `:silent` - Whether to suppress console messages about service start/stop/reconfigure.
     * `:plugins` - List of plugin modules this services _depends_ on.
 
   Any other key is considered configuration for the service. See [Configuration](guides/07-configuration.md).
@@ -440,6 +444,8 @@ defmodule Malla.Service do
           # if paused is used, the service will start in 'paused' status and
           # plugins children will not yet be started
           | {:paused, boolean}
+          # if true, suppress console messages about service lifecycle
+          | {:silent, boolean}
           | {:plugins, [module]}
           | {atom, any}
 
