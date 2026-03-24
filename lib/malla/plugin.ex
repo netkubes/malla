@@ -241,7 +241,7 @@ defmodule Malla.Plugin do
       def plugin_use_spec, do: @plugin_use_spec
 
       # imports macro defcb and functions from this module
-      import unquote(__MODULE__), only: [defcb: 2]
+      import unquote(__MODULE__), only: [defcb: 2, defcallback: 2]
       Module.register_attribute(__MODULE__, :plugin_callbacks, accumulate: true, persist: true)
       Malla.Plugin.plugin_common()
     end

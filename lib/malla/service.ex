@@ -473,7 +473,7 @@ defmodule Malla.Service do
       # Any Service is really a Plugin under the hood, so we inject basic plugin callbacks
       Malla.Plugin.plugin_common()
 
-      import Malla.Service, only: [defcb: 2]
+      import Malla.Service, only: [defcb: 2, defcallback: 2]
       Module.register_attribute(__MODULE__, :plugin_callbacks, accumulate: true, persist: true)
 
       @use_spec unquote(use_spec)
