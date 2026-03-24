@@ -166,6 +166,7 @@ defmodule Malla.Plugin do
   end
 
   @doc false
+  # DO NOT USE THIS LEGACY VERSION
   defmacro defcallback(ast, do: block) do
     quote do
       defcb unquote(ast) do

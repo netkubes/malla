@@ -598,7 +598,7 @@ defmodule Malla.Service do
     arity = if args, do: length(args), else: 0
     real_name = "#{to_string(f)}_malla_service" |> String.to_atom()
 
-    spec_args = Enum.map(args || [], fn _ -> {:any, [], []} end)
+    spec_args = Enum.map(args || [], fn _ -> {:any, [], Elixir} end)
 
     ast =
       case ast do
@@ -611,12 +611,13 @@ defmodule Malla.Service do
 
     quote do
       @plugin_callbacks {unquote(f), unquote(arity)}
-      @spec unquote(real_name)(unquote_splicing(spec_args)) :: {:any, [], []}
+      @spec unquote(real_name)(unquote_splicing(spec_args)) :: any()
       def unquote(ast), do: unquote(block)
     end
   end
 
   @doc false
+  # DO NOT USE THIS LEGACY VERSION
   defmacro defcallback(ast, do: block) do
     quote do
       defcb unquote(ast) do
