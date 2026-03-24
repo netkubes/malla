@@ -554,7 +554,7 @@ defmodule Malla.Node do
 
       precompile_list when is_list(precompile_list) ->
         for {srv_id, callbacks} <- precompile_list do
-          do_make_stub_module(srv_id, callbacks)
+          _ = do_make_stub_module(srv_id, callbacks)
         end
 
         :ok

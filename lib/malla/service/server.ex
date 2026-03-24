@@ -826,17 +826,19 @@ defmodule Malla.Service.Server do
   defp msg(state, plugin, text),
     do: "Service #{inspect(state.id)} (#{inspect(plugin)}): " <> text
 
-  defp log(state, level, text) do
-    unless state.service.silent and level not in [:warning, :error] do
-      Logger.log(level, msg(state, text))
-    end
-  end
+  defp log(%{service: %{silent: true}}, level, _text)
+       when level in [:debug, :info, :notice],
+       do: :ok
 
-  defp log(state, level, plugin, text) do
-    unless state.service.silent and level not in [:warning, :error] do
-      Logger.log(level, msg(state, plugin, text))
-    end
-  end
+  defp log(state, level, text),
+    do: Logger.log(level, msg(state, text))
+
+  defp log(%{service: %{silent: true}}, level, _plugin, _text)
+       when level in [:debug, :info, :notice],
+       do: :ok
+
+  defp log(state, level, plugin, text),
+    do: Logger.log(level, msg(state, plugin, text))
 
   @spec do_update_plugins(term(), %State{}) :: {:reply, :ok | {:error, term()}, %State{}}
 

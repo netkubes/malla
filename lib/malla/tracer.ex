@@ -581,7 +581,8 @@ defmodule Malla.Tracer do
   @doc """
   Translates a level code to its corresponding Elixir Logger level.
   """
-  @spec level_to_logger(level_code) :: level_name
+  @spec level_to_logger(level_code) :: :debug | :info | :notice | :warning | :error
+  def level_to_logger(@level_min), do: :debug
   def level_to_logger(@level_debug), do: :debug
   def level_to_logger(@level_metric), do: :debug
   def level_to_logger(@level_info), do: :info
@@ -589,6 +590,7 @@ defmodule Malla.Tracer do
   def level_to_logger(@level_notice), do: :notice
   def level_to_logger(@level_warning), do: :warning
   def level_to_logger(@level_error), do: :error
+  def level_to_logger(code) when is_integer(code) and code >= @level_error, do: :error
   def level_to_logger(name) when is_atom(name), do: name_to_level(name) |> level_to_logger()
 
   # defp to_map(map) when is_map(map), do: map
