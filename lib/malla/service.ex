@@ -616,6 +616,15 @@ defmodule Malla.Service do
     end
   end
 
+  @doc false
+  defmacro defcallback(ast, do: block) do
+    quote do
+      defcb unquote(ast) do
+        unquote(block)
+      end
+    end
+  end
+
   # Compile-time hook that generates `require` statements for all plugins.
   # This ensures all plugin modules are compiled and available before
   # the service module is fully processed.

@@ -2,6 +2,8 @@
 locals_without_parens = [
   defcb: 1,
   defcb: 2,
+  defcallback: 1,
+  defcallback: 2,
   req: 1,
   req: 2,
   call: 1,

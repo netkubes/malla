@@ -165,6 +165,15 @@ defmodule Malla.Plugin do
     end
   end
 
+  @doc false
+  defmacro defcallback(ast, do: block) do
+    quote do
+      defcb unquote(ast) do
+        unquote(block)
+      end
+    end
+  end
+
   ## ===================================================================
   ## Use macro
   ## ===================================================================
