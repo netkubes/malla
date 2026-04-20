@@ -493,7 +493,7 @@ defmodule Malla.Service do
       def child_spec(start_ops \\ []) do
         %{
           id: __MODULE__,
-          start: {Malla.Service.Server, :start_link, [__MODULE__, start_ops]},
+          start: {__MODULE__, :start_link, [__MODULE__, start_ops]},
           restart: :transient,
           shutdown: :infinity,
           type: :worker
