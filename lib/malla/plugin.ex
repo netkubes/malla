@@ -128,11 +128,70 @@ defmodule Malla.Plugin do
   """
   @callback plugin_stop(Malla.id(), config :: keyword) :: :ok | {:error, term()}
 
+  @doc """
+  Optional **compile-time** callback that injects code into the service module.
+
+  Unlike the other plugin callbacks, `plugin_module/1` is invoked while the
+  service module is being compiled (via a `@before_compile` hook), not at
+  runtime. For each plugin in the service's `t:Malla.Service.t/0` plugin chain,
+  if `plugin_module/1` is exported, its return value (a quoted expression) is
+  spliced into the body of the service module.
+
+  This allows a plugin to generate functions, module attributes, or even
+  nested submodules that become part of the service module itself,
+  parameterized by the service's compile-time data: `id`, `plugin_chain`,
+  static `config`, the resolved `callbacks` map, etc.
+
+  The callback is invoked once per service compilation, in plugin chain order
+  (top-level plugins first, `Malla.Plugins.Base` last). It runs after the
+  callback dispatch logic has been generated, so `service.callbacks` is fully
+  populated.
+
+  Because the injected code lives on the service module, it is visible across
+  the cluster through the same virtual-module mechanism used for remote calls.
+
+  > #### Use sparingly {: .warning}
+  >
+  > Code injection makes the service module's surface area depend on which
+  > plugins were compiled into it, which can be surprising to readers and
+  > harder to trace than ordinary `defcb` callbacks or plugin functions.
+  > Reach for `plugin_module/1` only when the desired behavior cannot be
+  > expressed as a normal callback or helper — typical cases are generating
+  > a function whose body must close over compile-time data (the service
+  > `id`, the resolved `callbacks` map, etc.) or building a nested submodule
+  > under the service.
+  >
+  > Plugins that use `plugin_module/1` **must** document, in their own
+  > `@moduledoc`, exactly what is injected into the service module: the
+  > names and arities of any generated functions, any module attributes,
+  > and any nested submodules. Without this, users of the plugin have no
+  > way to know which symbols on their service module came from where.
+
+  ## Example
+
+      defmodule MyApp.MetricsPlugin do
+        use Malla.Plugin
+
+        def plugin_module(service) do
+          prefix = "malla." <> Atom.to_string(service.id)
+
+          quote do
+            def metric_prefix, do: unquote(prefix)
+          end
+        end
+      end
+
+  After the service compiles, `MyService.metric_prefix/0` is a regular
+  function on the service module.
+  """
+  @callback plugin_module(service :: Malla.Service.t()) :: Macro.t()
+
   @optional_callbacks plugin_config: 2,
                       plugin_config_merge: 3,
                       plugin_start: 2,
                       plugin_updated: 3,
-                      plugin_stop: 2
+                      plugin_stop: 2,
+                      plugin_module: 1
 
   @doc """
   Macro for defining plugin callbacks.

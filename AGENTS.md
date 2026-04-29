@@ -63,6 +63,7 @@ Services have admin status (`:active`, `:pause`, `:inactive`) and running status
 2. `plugin_start/2` - Bottom to top, returns child_spec for supervised children
 3. `plugin_updated/3` - On reconfiguration, can trigger restart
 4. `plugin_stop/2` - Top to bottom, cleanup before children are stopped
+5. `plugin_module/1` - Compile-time only. Returns quoted code that is spliced into the service module (functions, attributes, submodules), parameterized by the compile-time `Malla.Service.t`. Top-level to bottom, runs after callback dispatch is generated. Use sparingly — only when behavior cannot be expressed as a normal callback or helper. Plugins that use it MUST document in their `@moduledoc` exactly what is injected (names/arities of functions, attributes, submodules).
 
 ### Distributed Service Discovery
 

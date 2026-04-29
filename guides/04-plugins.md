@@ -169,5 +169,6 @@ Plugins can hook into the service lifecycle by implementing standard Elixir beha
 - `c:Malla.Plugin.plugin_start/2`: Called during the start phase (bottom-up). Each plugin can initialize resources and return a list of child processes to be supervised.
 - `c:Malla.Plugin.plugin_updated/3`: Called when a service's configuration is updated at runtime. Can request a restart if needed.
 - `c:Malla.Plugin.plugin_stop/2`: Called during the stop phase (top-down). Each plugin can clean up its resources before its children are stopped.
+- `c:Malla.Plugin.plugin_module/1`: A **compile-time** hook (not runtime). Returns a quoted expression that is spliced into the service module, letting a plugin add functions or submodules parameterized by the service's compile-time data. Use sparingly — and any plugin that uses it must document exactly what it injects into the service module.
 
 See the [Lifecycle guide](06-lifecycle.md) for more details on the complete lifecycle, and the [Reconfiguration guide](07a-reconfiguration.md) for details on runtime configuration updates.

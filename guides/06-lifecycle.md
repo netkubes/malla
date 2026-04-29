@@ -265,6 +265,45 @@ If a service's supervised child crashes and the supervisor's restart strategy is
 1.  **Status Update**: The running status becomes `:failed`, triggering `c:Malla.Plugin.Base.service_status_changed/1` callbacks.
 2.  **Supervisor Restart**: The service's own supervisor will then attempt to restart it according to its configured strategy. This will trigger the full startup sequence again.
 
+## Compile-Time Code Injection
+
+In addition to the runtime callbacks above, plugins can hook into the **service module's compilation** via `c:Malla.Plugin.plugin_module/1`. This callback runs once when the service module is being compiled (not when the service starts), and its return value — a quoted expression — is spliced into the service module's body.
+
+This is useful when a plugin needs to add functions, attributes, or nested submodules to the service module itself, parameterized by compile-time data such as the service's `id`, the resolved `plugin_chain`, or the registered `callbacks` map.
+
+> **⚠️ Use sparingly.** Code injection makes the service module's surface area depend on which plugins were compiled into it — readers cannot tell from the service source where a given function came from. Prefer ordinary `defcb` callbacks or plain plugin functions whenever they can express the same behavior. Reach for `plugin_module/1` only when the generated code genuinely needs to close over compile-time data or live as a nested submodule under the service.
+>
+> **Always document what is injected.** Any plugin that implements `plugin_module/1` must state, in its own `@moduledoc`, exactly what it adds to the service module: the names and arities of generated functions, any module attributes, and any nested submodules. Without this, users of the plugin have no way to know which symbols on their service module came from where.
+
+```elixir
+defmodule MyApp.MetricsPlugin do
+  @moduledoc """
+  ...
+
+  ## Injected into the service module
+
+  This plugin uses `c:Malla.Plugin.plugin_module/1` and adds the following
+  to the service module:
+
+    * `metric_prefix/0` — returns the metric prefix string for this service.
+  """
+
+  use Malla.Plugin
+
+  def plugin_module(service) do
+    prefix = "malla." <> Atom.to_string(service.id)
+
+    quote do
+      def metric_prefix, do: unquote(prefix)
+    end
+  end
+end
+```
+
+After compilation, `MyService.metric_prefix/0` is a regular function defined on the service module — and, like any other service function, it is reachable from remote nodes through Malla's virtual module mechanism.
+
+`plugin_module/1` is invoked in plugin chain order (top-level plugins first, `Malla.Plugins.Base` last), after the callback dispatch logic has been generated, so the `t:Malla.Service.t/0` it receives has its `callbacks` map fully populated.
+
 ## Lifecycle Callbacks Summary
 
 Plugins can implement these callbacks to hook into the service lifecycle.
@@ -280,6 +319,7 @@ These are standard Elixir behaviours defined in `Malla.Plugin`:
 | `c:Malla.Plugin.plugin_start/2` | Bottom → Top | Startup | Return child specs to be supervised. |
 | `c:Malla.Plugin.plugin_updated/3` | Bottom → Top | Reconfiguration | Handle dynamic configuration changes, optionally request restart. |
 | `c:Malla.Plugin.plugin_stop/2` | Top → Bottom | Shutdown | Clean up resources before termination. |
+| `c:Malla.Plugin.plugin_module/1` | Top → Bottom | Service compilation | Inject code (functions, attributes, submodules) into the service module. |
 
 ### Malla Callbacks (defcb)
 
