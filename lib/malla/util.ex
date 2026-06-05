@@ -20,7 +20,6 @@
 
 defmodule Malla.Util do
   @moduledoc false
-  require Logger
 
   # def validate_app!(schema, app) do
   #   config = Application.get_all_env(app)

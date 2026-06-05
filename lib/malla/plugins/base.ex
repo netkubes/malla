@@ -28,7 +28,6 @@ defmodule Malla.Plugins.Base do
   """
 
   use Malla.Plugin
-  require Logger
   alias Malla.Service
 
   @type id :: Malla.id()

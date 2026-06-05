@@ -25,7 +25,6 @@ defmodule Malla.Service.Make do
   # including expanding plugin dependencies, resolving callback chains, and preparing services
   # for dynamic compilation in the Malla framework.
   alias Malla.Service
-  require Logger
 
   # Builds a Service struct from the given service_id, use_spec keywords, and callbacks.
   # Extracts various configuration options like class, version, plugins, etc., and initializes

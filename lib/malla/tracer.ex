@@ -534,14 +534,23 @@ defmodule Malla.Tracer do
   defp macro_log(level, text, data, caller) do
     %{file: _file, line: line} = caller
 
-    quote do
-      data = unquote(data)
-      data = if is_map(data), do: Map.to_list(data), else: data
+    # Normalize `data` to a keyword list. When the argument is a literal list
+    # (the common case, including the default `[]`) we keep it as-is so the
+    # type checker does not flag the runtime `is_map/1` check as dead code.
+    # Map literals are converted at compile time; only genuinely dynamic
+    # values keep the runtime branch.
+    data =
+      cond do
+        is_list(data) -> data
+        match?({:%{}, _, _}, data) -> quote(do: Map.to_list(unquote(data)))
+        true -> quote(do: (d = unquote(data); if(is_map(d), do: Map.to_list(d), else: d)))
+      end
 
+    quote do
       data = [
         {:module, __MODULE__},
         {:line, unquote(line)}
-        | data
+        | unquote(data)
       ]
 
       Malla.local(:malla_span_log, [unquote(level), fn -> unquote(text) end, data])

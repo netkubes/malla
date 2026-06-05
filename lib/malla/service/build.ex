@@ -26,7 +26,6 @@ defmodule Malla.Service.Build do
   # allowing for modular and extensible service behavior in the Malla system.
 
   alias Malla.Service
-  require Logger
 
   ## ===================================================================
   ## Dispatcher

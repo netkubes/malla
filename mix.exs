@@ -4,7 +4,7 @@ defmodule Malla.MixProject do
   def project do
     [
       app: :malla,
-      version: "0.0.1-rc.1",
+      version: "0.0.1-rc.2",
       elixir: "~> 1.17",
       description: "Framework for developing distributed services in Elixir networks.",
       package: %{
