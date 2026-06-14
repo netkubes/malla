@@ -202,7 +202,7 @@ defmodule Malla.Plugin do
   A Malla callback can return any of the following:
 
   * `:cont`: continues the call to the next function in the call chain
-  * `{:cont, [:a, b:]}`: continues the call, but changing the parameters used for the next call
+  * `{:cont, [:a, :b]}`: continues the call, but changing the parameters used for the next call
     in chain. The list of the array must fit the number of arguments.
   * `{:cont, :a, :b}`: equivalent to {:cont, [:a, :b]}
   * _any_: any other response stops the call chain and returns this value to the caller

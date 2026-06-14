@@ -166,7 +166,9 @@ defmodule Malla.Event do
         meta =
           Map.merge(meta, %{
             hash: ref,
-            first_timestamp: timestamp,
+            # store the converted DateTime (as in the ETS entry and the spec),
+            # not the raw NaiveDateTime
+            first_timestamp: datetime,
             count: 1
           })
 

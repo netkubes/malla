@@ -96,8 +96,14 @@ defmodule Malla.Util do
     Keyword.merge(base, update, &keyword_merge_resolve/3)
   end
 
-  defp keyword_merge_resolve(_key, left, right) when is_list(left) and is_list(right),
-    do: keyword_merge(left, right)
+  # Only recurse when both sides are keyword lists; plain lists (and any other
+  # value type) are replaced by the update, mirroring Keyword.merge/2 and
+  # avoiding an ArgumentError when merging non-keyword lists.
+  defp keyword_merge_resolve(_key, left, right) when is_list(left) and is_list(right) do
+    if Keyword.keyword?(left) and Keyword.keyword?(right),
+      do: keyword_merge(left, right),
+      else: right
+  end
 
   defp keyword_merge_resolve(_key, _left, right), do: right
 

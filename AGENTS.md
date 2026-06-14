@@ -99,7 +99,6 @@ Services are configured through deep-merged layers:
 1. Static config in `use Malla.Service, key: value`
 2. OTP app config (if `otp_app:` is specified)
 3. Runtime config in `start_link/1` or supervisor `child_spec/1`
-4. Remote config via `from_plugin:` option
 
 Plugin config macro supports:
 - `config key: value` - adds to root config

@@ -594,4 +594,74 @@ defmodule CallTest do
       Process.sleep(100)
     end
   end
+
+  describe "Malla.Request.request!/4 with unavailable service" do
+    setup do
+      on_exit(fn ->
+        if Process.whereis(RequestTestService) do
+          RequestTestService.stop()
+          Process.sleep(100)
+        end
+
+        Malla.put_service_id(nil)
+      end)
+    end
+
+    test "raises ReqError with :service_not_available when target is down" do
+      # Ensure the target service is not running
+      if Process.whereis(RequestTestService) do
+        RequestTestService.stop()
+        Process.sleep(100)
+      end
+
+      # request/4 needs a caller context for its outgoing trace span; the
+      # request stack (Tracer + Status) provides the malla_span and status
+      # callbacks as compile-time module functions, so no running process is
+      # required for the caller context.
+      Malla.put_service_id(RequestTestService)
+
+      # A down service must surface as a :service_not_available error (not a
+      # CaseClauseError crash, nor an opaque :internal_error). This exercises
+      # the client-side normalization in Malla.Request.request/4 together with
+      # the status mapping for :malla_service_not_available.
+      err =
+        assert_raise Malla.Request.ReqError, fn ->
+          Malla.Request.request!(RequestTestService, :regular_function, [],
+            sna_retries: 0,
+            timeout: 1000
+          )
+        end
+
+      assert err.type == :service_not_available
+    end
+  end
+
+  describe "reconfigure default deep-merge" do
+    setup do
+      on_exit(fn ->
+        if Process.whereis(CallTestService) do
+          CallTestService.stop()
+          Process.sleep(100)
+        end
+      end)
+    end
+
+    test "deep-merges nested keyword config when no plugin handles the merge" do
+      {:ok, _pid} = CallTestService.start_link(my_plugin: [retries: 3, timeout: 1000])
+      Process.sleep(100)
+
+      # CallTestService has no custom plugin_config_merge, so the default
+      # deep-merge fallback is exercised. Reconfiguring a single nested key
+      # must preserve the other keys instead of replacing the whole entry.
+      :ok = CallTestService.reconfigure(my_plugin: [retries: 5])
+      Process.sleep(100)
+
+      nested = Keyword.get(CallTestService.get_config(), :my_plugin)
+      assert Keyword.get(nested, :retries) == 5
+      assert Keyword.get(nested, :timeout) == 1000
+
+      CallTestService.stop()
+      Process.sleep(100)
+    end
+  end
 end

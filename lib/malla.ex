@@ -165,7 +165,7 @@ defmodule Malla do
 
     If id is `nil` or `:undefined`, the key is deleted.
   """
-  @spec put_service_id(id | nil) :: id
+  @spec put_service_id(id | nil) :: id | nil
   def put_service_id(nil), do: Process.delete(:malla_service_id)
   def put_service_id(id), do: Process.put(:malla_service_id, id)
 
@@ -301,7 +301,14 @@ defmodule Malla do
           | {:excp_retries, pos_integer}
           | {:retries_sleep_msec, pos_integer}
 
-  @spec remote(id(), atom(), [any()], [remote_opt]) :: any()
+  # Unlike `t:Malla.Node.call_result/0`, the RPC error is rewrapped here as
+  # `{:malla_rpc_error, ...}` (see the case below). A successful call returns
+  # the callback's own result, hence the trailing `term`.
+  @type remote_result ::
+          {:error, :malla_service_not_available | {:malla_rpc_error, {term(), String.t()}}}
+          | term
+
+  @spec remote(id(), atom(), [any()], [remote_opt]) :: remote_result()
 
   def remote(srv_id, fun, args, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
