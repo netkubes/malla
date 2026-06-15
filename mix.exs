@@ -50,13 +50,16 @@ defmodule Malla.MixProject do
       "README.md": [title: "Overview"],
       "CHANGELOG.md": [title: "Changelog"],
       "LICENSE.md": [title: "License"],
-      "guides/00-glossary.md": [title: "Glossary"],
+      # Introduction
       "guides/01-introduction.md": [title: "Introduction", filename: "introduction"],
       "guides/02-quick-start.md": [title: "Quick Start"],
+      "guides/00-glossary.md": [title: "Glossary"],
+      # Tutorial
       "livebook/getting_started.livemd": [title: "Getting Started Tutorial"],
       "livebook/distributed_tutorial.livemd": [title: "Distributed Services Tutorial"],
       "livebook/distributed_storage.livemd": [title: "Distributed Tutorial — Storage Node"],
       "livebook/distributed_client.livemd": [title: "Distributed Tutorial — Client Node"],
+      # Concepts
       "guides/03-services.md": [title: "Services"],
       "guides/04-plugins.md": [title: "Plugins"],
       "guides/05-callbacks.md": [title: "Callbacks"],
@@ -67,11 +70,14 @@ defmodule Malla.MixProject do
       "guides/08-distribution/01-cluster-setup.md": [title: "Cluster Setup"],
       "guides/08-distribution/02-service-discovery.md": [title: "Service Discovery"],
       "guides/08-distribution/03-remote-calls.md": [title: "Remote Calls"],
+      # Optional Plugins
       "guides/08-distribution/04-request-handling.md": [title: "Request Handling"],
-      "guides/09-observability/01-tracing.md": [title: "Tracing"],
       "guides/09-observability/02-status-handling.md": [title: "Status Handling"],
-      "guides/12-testing.md": [title: "Testing"],
+      "guides/09-observability/01-tracing.md": [title: "Tracing"],
+      "guides/11-http-admin.md": [title: "HTTP Admin Server"],
+      # Development
       "guides/13-plugin-development.md": [title: "Plugin Development"],
+      "guides/12-testing.md": [title: "Testing"],
       "guides/14-troubleshooting.md": [title: "Troubleshooting"],
       "guides/15-deployment.md": [title: "Deployment"]
     ]
@@ -79,42 +85,15 @@ defmodule Malla.MixProject do
 
   defp groups_for_extras do
     [
-      "Getting Started": [
-        "Introduction",
-        "Quick Start",
-        "Getting Started Tutorial",
-        "Distributed Services Tutorial"
-      ],
-      "Core Concepts": [
-        "Services",
-        "Plugins",
-        "Callbacks",
-        "Service Lifecycle",
-        "Configuration",
-        "Reconfiguration",
-        "Storage and State"
-      ],
-      Distribution: [
-        "Cluster Setup",
-        "Service Discovery",
-        "Remote Calls"
-      ],
-      Observability: [
-        "Tracing",
-        "Status Handling"
-      ],
-      "Advanced Topics": [
-        "Testing",
-        "Plugin Development",
-        "Deployment"
-      ],
-      Reference: [
-        "Glossary",
-        "Troubleshooting",
-        "Plugin API",
-        "Service API",
-        "Tracer Analysis"
-      ]
+      # ExDoc matches these patterns against each extra's file path (not its
+      # title), so the values must be regexes over the paths in `extras/0`.
+      Introduction: ~r{guides/(00-glossary|01-introduction|02-quick-start)},
+      Tutorial: ~r{livebook/},
+      Concepts:
+        ~r{guides/(03-services|04-plugins|05-callbacks|06-lifecycle|07-configuration|07a-reconfiguration|10-storage|08-distribution/0[123]-)},
+      "Optional Plugins":
+        ~r{guides/(08-distribution/04-request-handling|09-observability/|11-http-admin)},
+      Development: ~r{guides/(12-testing|13-plugin-development|14-troubleshooting|15-deployment)}
     ]
   end
 
@@ -141,7 +120,9 @@ defmodule Malla.MixProject do
         Malla.Status,
         Malla.Plugins.Status,
         Malla.Tracer,
-        Malla.Plugins.Tracer
+        Malla.Plugins.Tracer,
+        Malla.Plugins.Httpd,
+        Malla.Plugins.Httpd.Lifecycle
       ]
     ]
   end
