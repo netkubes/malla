@@ -43,6 +43,7 @@ defmodule Malla.Tracer do
   - [`info/2`](`Malla.Tracer.info/2`) - Logs an info-level message with metadata.
   - [`event/1`](`Malla.Tracer.event/1`) - Records a tracing event.
   - [`event/2`](`Malla.Tracer.event/2`) - Records a tracing event with data.
+  - [`event/3`](`Malla.Tracer.event/3`) - Records a tracing event with data and metadata.
   - [`notice/1`](`Malla.Tracer.notice/1`) - Logs a notice-level message.
   - [`notice/2`](`Malla.Tracer.notice/2`) - Logs a notice-level message with metadata.
   - [`warning/1`](`Malla.Tracer.warning/1`) - Logs a warning-level message.
@@ -85,6 +86,7 @@ defmodule Malla.Tracer do
           info: 2,
           event: 1,
           event: 2,
+          event: 3,
           notice: 1,
           notice: 2,
           warning: 1,

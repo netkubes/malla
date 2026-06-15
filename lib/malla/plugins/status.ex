@@ -86,9 +86,9 @@ defmodule Malla.Plugins.Status do
       defcb status(:timeout), do: "Operation timed out"
 
       # Continue to next plugin
-      defcb status(_), do: :cont
+      defcb status(_), do: :continue
 
-  Remember to always include a catch-all clause returning `:cont` to allow other plugins to handle unknown statuses.
+  Remember to always include a catch-all clause returning `:continue` to allow other plugins to handle unknown statuses.
 
   ## Implemented Status Codes
 
@@ -184,6 +184,13 @@ defmodule Malla.Plugins.Status do
     do: [info: "MallaSpans EXIT: #{inspect(exit)}", code: 500]
 
   defcb status(:service_not_available), do: [info: "RPC service unavailable", code: 500]
+
+  # Malla's internal RPC layer (Malla.Node / Malla.remote) emits the
+  # malla_-prefixed atom. Map it to the same public status as
+  # :service_not_available so a down service is normalized consistently
+  # (and reachable by request!/4) instead of degrading to internal_error.
+  defcb status(:malla_service_not_available),
+    do: [status: "service_not_available", info: "RPC service unavailable", code: 500]
 
   defcb status({:method_not_allowed, method}),
     do: [info: "Method not allowed: '#{method}'", code: 405]

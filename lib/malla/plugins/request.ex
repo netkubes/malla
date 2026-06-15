@@ -149,7 +149,7 @@ defmodule Malla.Plugins.Request do
   Default implementation for incoming requests.
 
   * First it checks if service is running, returning `{:error, :malla_service_not_available}` in that case
-  * It tries to use base span_id in option `base_span_id`
+  * It uses the base span from the `:base_span` option, falling back to `:trace_base`
   """
   @callback malla_request(atom, list, keyword) ::
               {:ok | :created, map}
@@ -195,6 +195,18 @@ defmodule Malla.Plugins.Request do
                 info("REQ 'error' (#{inspect(error)})")
                 error(error)
                 {:error, Malla.Status.public(error)}
+
+              other ->
+                # Handler returned a value outside the documented response
+                # contract (see "Response Types"): turn it into a controlled
+                # internal error instead of crashing the request process.
+                notice("REQ invalid handler response: #{inspect(other)}")
+
+                {:error,
+                 Malla.Status.public(%Malla.Status{
+                   status: "internal_error",
+                   info: "Invalid request handler response"
+                 })}
             end
 
           stop = System.monotonic_time()

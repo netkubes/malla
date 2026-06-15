@@ -67,9 +67,10 @@ defmodule Malla.Service do
             # Chain of plugins, in the order they will be called (first top-level)
             plugin_chain: [module],
             config: Keyword.t(),
-            # List of callbacks exported by all plugins, and the list of plugins
-            # that implement each, in the order they should be called
-            callbacks: %{{atom, integer} => {atom, [module()]}}
+            # List of callbacks exported by all plugins, keyed by {name, arity},
+            # each mapping to the list of {plugin module, real function name}
+            # that implement it, in the order they should be called
+            callbacks: [{{atom, arity}, [{module, atom}]}]
           }
 
   defstruct id: nil,
@@ -82,7 +83,7 @@ defmodule Malla.Service do
             wait_for_services: [],
             plugin_chain: [],
             config: [],
-            callbacks: %{}
+            callbacks: []
 
   @type service_info() :: %{
           id: Malla.id(),
@@ -580,10 +581,10 @@ defmodule Malla.Service do
   A Malla callback can return any of the following:
 
   * `:cont`: continues the call to the next function in the call chain.
-  * `{:cont, [:a, b:]}`: continues the call, but changing the parameters used for the next call.
+  * `{:cont, [:a, :b]}`: continues the call, but changing the parameters used for the next call.
     in chain. The list of the array must fit the number of arguments.
   * `{:cont, :a, :b}`: equivalent to {:cont, [:a, :b]}.
-  * _any_: any other response stops the call chain a returns this value to the caller.
+  * _any_: any other response stops the call chain and returns this value to the caller.
 
   See **[Callbacks](guides/05-callbacks.md)** for details.
 

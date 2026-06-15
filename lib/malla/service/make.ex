@@ -102,12 +102,16 @@ defmodule Malla.Service.Make do
   # Plugins can declare they 'belong' to a 'group', for example:
   # `use Malla.Plugin, group: :group1`
   #
-  # All plugins belonging to the same 'group' are added a dependency on the
-  # previous plugin in the same group, so for example, if we define in our service
-  # `use MallaService, plugins: [PluginA, PluginB, PluginC] and they all declare
-  # the same group, PluginB will depend on Plugin A and PluginC will depend on PluginB,
-  # so they will be started in the exact order PluginA -> PluginB -> PluginC
-  # Callbacks will call first PluginC, then B and A
+  # All plugins in the same 'group' are chained to enforce an ordering among
+  # them. For a service declaring
+  # `use MallaService, plugins: [PluginA, PluginB, PluginC]` (all in the same
+  # group), the resulting callback execution order is:
+  #   MyService -> PluginC -> PluginB -> PluginA
+  # (i.e. the reverse of the declaration order, after the service module)
+  # (see guides/04-plugins.md). NOTE: the list is processed in reverse below and
+  # the raw dependency edges built here are flipped again by the topological sort
+  # (and by get_callbacks/2), so the local edge direction is NOT the final chain
+  # order — rely on the documented end result above, not on the edges built here.
   # Adds group-based dependencies to plugins, ensuring intra-group ordering.
   # Processes plugins in reverse to build dependencies from last to first in group.
   defp add_group_deps(plugins), do: add_group_deps(Enum.reverse(plugins), [], %{})
@@ -293,6 +297,15 @@ defmodule Malla.Service.Make do
   # Adds callbacks from a plugin to the accumulator map.
   # For each callback, determines the real function name (appending "_malla_service" for services),
   # and prepends the plugin to the list of modules implementing that callback.
+  #
+  # Both element shapes below are live, depending on the source of `callbacks`:
+  #   * `{name, arity}`   — the service module's own callbacks, read via
+  #     `Module.get_attribute(:plugin_callbacks)` at compile time (flat tuples).
+  #   * `[{name, arity}]` — a plugin's callbacks, read via
+  #     `plugin.module_info()[:attributes]`, where each persisted
+  #     `accumulate: true` entry is wrapped in a single-element list.
+  # Do NOT remove the list-wrapped clause: it is the active path for every
+  # plugin's callbacks; dropping it breaks compilation of any service using a plugin.
   defp do_add_callbacks(plugin, is_service, callbacks, acc) do
     :lists.usort(callbacks)
     |> Enum.reduce(
@@ -307,7 +320,7 @@ defmodule Malla.Service.Make do
           Map.put(acc, {name, arity}, [{plugin, real_name} | plugins])
 
         [{name, arity}], acc ->
-          # Handle list-wrapped callback (legacy?).
+          # List-wrapped callback (plugin path, see note above).
           real_name = if is_service, do: String.to_atom("#{name}_malla_service"), else: name
           plugins = Map.get(acc, {name, arity}, [])
           Map.put(acc, {name, arity}, [{plugin, real_name} | plugins])

@@ -98,7 +98,7 @@ defmodule ProductService do
     :ok
   end
 
-  # Success with data (data should be serializable: maps, lists, primitives)
+  # Success with data (data must be a serializable map or list)
   def get_product(product_id) do
     product = Repo.get!(Product, product_id)
     {:ok, product}

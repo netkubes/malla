@@ -543,7 +543,7 @@ defmodule Malla.Node do
   Configuration format:
       config :malla,
         precompile: [
-          MyService: [callback1: 0, callback2: 3]
+          {MyService, [callback1: 0, callback2: 3]}
         ]
   """
   @spec precompile_stubs() :: :ok

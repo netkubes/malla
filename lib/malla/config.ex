@@ -81,7 +81,7 @@ defmodule Malla.Config do
     do: :ets.update_counter(__MODULE__, {domain, key}, count)
 
   @doc "Updates a store key by applying a function to the current value. This operation is serialized."
-  @spec update(domain(), term(), (domain() -> term())) :: :ok
+  @spec update(domain(), term(), (term() -> term())) :: :ok
   def update(domain, key, fun),
     do: GenServer.call(__MODULE__, {:update, domain, key, fun})
 

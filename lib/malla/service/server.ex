@@ -221,8 +221,11 @@ defmodule Malla.Service.Server do
         service = state.service
         # we update first the lower services
         chain = Enum.reverse(service.plugin_chain)
-        _result = call_plugin_updated(chain, old_config, service)
-        {:reply, :ok, state}
+        # propagate any plugin_updated error to the caller instead of swallowing it
+        case call_plugin_updated(chain, old_config, service) do
+          :ok -> {:reply, :ok, state}
+          {:error, error} -> {:reply, {:error, error}, state}
+        end
 
       {:error, error} ->
         {:reply, {:error, error}, state}
@@ -510,8 +513,10 @@ defmodule Malla.Service.Server do
           {:ok, keyword} | {:error, term}
 
   defp call_plugin_config_merge([], _srv_id, config, update) do
-    # No plugins handled merge, deep-merge by default
-    {:ok, Keyword.merge(config, update)}
+    # No plugins handled merge, deep-merge by default so nested keyword config
+    # (e.g. `my_plugin: [retries: 5]`) is merged into the existing config
+    # instead of replacing the whole `my_plugin` entry.
+    {:ok, Malla.Util.keyword_merge(config, update)}
   end
 
   defp call_plugin_config_merge([plugin | rest], srv_id, config, update) do

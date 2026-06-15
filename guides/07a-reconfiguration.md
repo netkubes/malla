@@ -63,8 +63,8 @@ defmodule MyPlugin do
   def plugin_updated(srv_id, old_config, new_config) do
     # Check what changed
     if config_requires_restart?(old_config, new_config) do
-      # Request a full service restart
-      {:restart, :configuration_changed}
+      # Request a restart
+      {:ok, restart: true}
     else
       # Apply changes dynamically
       apply_config_changes(old_config, new_config)
@@ -78,7 +78,7 @@ end
 - Called in **bottom-to-up** order (base → plugin2 → plugin1 → service)
 - Receives both old and new configuration
 - Can return `:ok` to accept changes without restart
-- Can return `{:restart, reason}` to request a full service restart
+- Can return `{:ok, restart: true}` to request a restart
 - If any plugin requests restart, the service will restart with the new configuration
 
 ## Dynamic vs. Restart-Required Changes

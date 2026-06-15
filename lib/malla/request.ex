@@ -196,7 +196,9 @@ defmodule Malla.Request do
       # remote_service = if op == :force_service_error, do: :no_service, else: remote_service
       info("REQ for #{srv} '#{fun}' (#{inspect(args)}) [#{inspect(opts)}]")
       base_span = Malla.Tracer.get_base()
-      # DELETED OLD trace_base
+      # Pass the base span under both keys for backward compatibility: the
+      # request-in side reads :base_span and falls back to :trace_base (the
+      # older name) so plugins expecting either name keep working.
       opts = [{:trace_base, base_span}, {:base_span, base_span} | opts]
       args = [fun, args, opts]
 
@@ -217,7 +219,7 @@ defmodule Malla.Request do
             info("REQ result: '#{result}'")
             {result, %{}}
 
-          {result, data} when result in [:ok, :created] ->
+          {result, data} when result in [:ok, :created] and (is_map(data) or is_list(data)) ->
             info("REQ result: '#{result}'")
             debug("REQ response #{inspect(data)}")
             {result, data}
@@ -225,6 +227,24 @@ defmodule Malla.Request do
           {result, %Malla.Status{} = status} when result in [:status, :error] ->
             info("REQ result: '#{result}' (#{inspect(status)})")
             {result, status}
+
+          {:error, reason} ->
+            # Transport/normalization errors (e.g. service_not_available,
+            # malla_rpc_error) reach the client as a bare reason: normalize it
+            # into a public Status instead of crashing the caller.
+            info("REQ 'error' (#{inspect(reason)})")
+            {:error, Malla.Status.public(reason)}
+
+          other ->
+            # Reply outside the documented response contract (see "Response
+            # Types"): turn it into a controlled internal error.
+            notice("REQ invalid response: #{inspect(other)}")
+
+            {:error,
+             Malla.Status.public(%Malla.Status{
+               status: "internal_error",
+               info: "Invalid request response"
+             })}
         end
 
       info("Duration is #{duration} usecs")

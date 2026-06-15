@@ -17,7 +17,8 @@ test_support_files = [
   "tracer_service.ex",
   "status_test_service.ex",
   "call_test_service.ex",
-  "custom_cb_in_service.ex"
+  "custom_cb_in_service.ex",
+  "request_test_service.ex"
 ]
 
 Enum.each(test_support_files, fn file ->

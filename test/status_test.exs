@@ -442,4 +442,18 @@ defmodule Malla.StatusTest do
       assert String.contains?(status.info, "Internal reference")
     end
   end
+
+  describe "RPC not-available normalization" do
+    test "maps internal :malla_service_not_available to a public service_not_available status" do
+      {:ok, _pid} = StatusTestService.start_link([])
+
+      # The internal RPC layer emits the malla_-prefixed atom; it must be
+      # normalized to the same public status as :service_not_available
+      # (instead of degrading to internal_error).
+      status = Status.public(StatusTestService, :malla_service_not_available)
+      assert status.status == "service_not_available"
+      assert status.info == "RPC service unavailable"
+      assert status.code == 500
+    end
+  end
 end
