@@ -476,9 +476,10 @@ defmodule Malla.Node do
         _ -> do_make_module(srv_id, callbacks)
       end
     else
-      if not function_exported?(srv_id, :__info__, 1) do
-        # let's make sure the original module is not there
-        # because the service is running locally
+      # The original module may exist (this node can run the service) without
+      # being loaded yet, as modules are loaded on first use in interactive
+      # mode: it must not be replaced
+      if not Code.ensure_loaded?(srv_id) do
         do_make_module(srv_id, callbacks)
       end
     end
