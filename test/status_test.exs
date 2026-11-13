@@ -456,4 +456,16 @@ defmodule Malla.StatusTest do
       assert status.code == 500
     end
   end
+
+  describe "remote exceptions" do
+    test "the text of a remote exception does not reach the public status" do
+      {:ok, _pid} = StatusTestService.start_link([])
+      error = {:malla_rpc_error, {%RuntimeError{message: "secret detail"}, "secret detail"}}
+
+      status = Status.public(StatusTestService, error)
+      assert status.status == "internal_error"
+      assert status.code == 500
+      refute status.info =~ "secret detail"
+    end
+  end
 end

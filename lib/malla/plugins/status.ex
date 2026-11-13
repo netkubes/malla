@@ -149,7 +149,9 @@ defmodule Malla.Plugins.Status do
   defcb status(:conflict), do: [info: "Conflict", code: 409]
   defcb status(:content_type_invalid), do: [info: "Content type is invalid", code: 400]
 
-  defcb status({:malla_rpc_error, {_term, text}}), do: [info: text, code: 500]
+  # No clause for `{:malla_rpc_error, {exception, text}}` (an exception in a remote call,
+  # see Malla.remote/4) on purpose: its text may carry internals, so it reaches
+  # status_public/1, which logs it under a reference and answers "internal_error".
 
   defcb status({:field_invalid, field}),
     do: [info: "Field '#{field}' is invalid", code: 400, data: [field: field]]
