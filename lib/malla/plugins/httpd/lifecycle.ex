@@ -37,7 +37,7 @@ defmodule Malla.Plugins.Httpd.Lifecycle do
     a Kubernetes readiness probe so the pod is added to the service network
     only once it is ready.
   * `GET /stop` — first invokes `c:httpd_lifecycle_drain_start/0`, then drains
-    every locally started service via `Malla.Service.Server.drain_all_local/0`
+    every locally started service via `Malla.Service.drain_all_local/0`
     (in each service's `:priority` order, lowest first), and once all are drained invokes the
     `c:httpd_lifecycle_drain/0` callback to let services run any additional
     shutdown work. Replies `200` on success or `500` after ten failed retries

@@ -390,6 +390,16 @@ defmodule Malla.Service do
   @spec drain(Malla.id()) :: boolean
   def drain(srv_id), do: srv_id.service_drain()
 
+  @doc """
+    Drains every service running on this node, in the order of their `:priority`
+    option (lowest first), and returns `true` when all of them report drained.
+
+    It stops at the first service that is not drained yet, so the services after
+    it keep working; call it again until it returns `true`.
+  """
+  @spec drain_all_local() :: boolean
+  defdelegate drain_all_local(), to: Malla.Service.Server
+
   # @doc """
   #   Finds all local running services and tries to drain them.
   #   For each service, `drain/1` is called. If a service is successful, next one is called.
@@ -432,7 +442,7 @@ defmodule Malla.Service do
     * `:global` - Whether the service is globally visible.
     * `:paused` - Whether to start in paused state.
     * `:silent` - Whether to suppress console messages about service start/stop/reconfigure.
-    * `:priority` - Integer, default `0`. Order in which `Malla.Service.Server.drain_all_local/0`
+    * `:priority` - Integer, default `0`. Order in which `Malla.Service.drain_all_local/0`
       drains the local services: lowest first. Give a higher value to services that must keep
       working while the others drain, such as the HTTP server answering the drain itself.
     * `:plugins` - List of plugin modules this services _depends_ on.
