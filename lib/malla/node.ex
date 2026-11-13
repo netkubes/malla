@@ -189,7 +189,7 @@ defmodule Malla.Node do
     do: {:error, :malla_service_not_available}
 
   defp do_call([node | rest], mod, fun, args, opts) do
-    case do_call_node(node, mod, fun, args, opts) do
+    case do_call_node(node, mod, fun, args, opts) |> legacy_not_available() do
       {:error, :malla_service_not_available} ->
         name = Malla.get_service_name(mod)
 
@@ -207,6 +207,15 @@ defmodule Malla.Node do
         other
     end
   end
+
+  # Older Mallas (before the rename in 978ebea, and copies forked from them) answer
+  # `:service_not_available` without the prefix. Read it as the prefixed atom so callers
+  # still fail over to the next node while a cluster is upgraded node by node.
+  # TODO: remove after 0.0.1, once no cluster mixes in nodes on the old name.
+  defp legacy_not_available({:error, :service_not_available}),
+    do: {:error, :malla_service_not_available}
+
+  defp legacy_not_available(other), do: other
 
   # https://erlang.org/doc/man/erpc.html#call-4
   defp do_call_node(node, mod, fun, args, opts) do
