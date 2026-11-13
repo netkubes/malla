@@ -290,7 +290,8 @@ defmodule Malla do
       Be very careful when activating these retries, since the request could have been
       processed partially on the remote side, and you may re-execute it.
 
-      The default timeout is #{@default_timeout} ms.
+      The default timeout is the `:remote_timeout` setting of the `:malla` application
+      (`config :malla, :remote_timeout, 20_000`), #{@default_timeout} ms when not set.
 
       You can instrument the call by overriding `c:Malla.Plugins.Base.service_cb_in/3`.
   """
@@ -311,7 +312,7 @@ defmodule Malla do
   @spec remote(id(), atom(), [any()], [remote_opt]) :: remote_result()
 
   def remote(srv_id, fun, args, opts \\ []) do
-    timeout = Keyword.get(opts, :timeout, @default_timeout)
+    timeout = Keyword.get_lazy(opts, :timeout, &default_timeout/0)
 
     case Malla.Node.call_cb(srv_id, fun, args, timeout: timeout) do
       {:error, :malla_service_not_available} ->
@@ -351,6 +352,9 @@ defmodule Malla do
         other
     end
   end
+
+  # Read at each call, so it can be changed at runtime
+  defp default_timeout(), do: Application.get_env(:malla, :remote_timeout, @default_timeout)
 
   @doc """
   Convenient macro to make remote calls more friendly.

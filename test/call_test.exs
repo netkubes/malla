@@ -664,4 +664,30 @@ defmodule CallTest do
       Process.sleep(100)
     end
   end
+
+  describe "Malla.remote default timeout" do
+    setup do
+      on_exit(fn ->
+        Application.delete_env(:malla, :remote_timeout)
+
+        if Process.whereis(CallTestService) do
+          CallTestService.stop()
+          Process.sleep(100)
+        end
+      end)
+    end
+
+    test "comes from config :malla, :remote_timeout" do
+      {:ok, _pid} = CallTestService.start_link()
+      Process.sleep(100)
+
+      Application.put_env(:malla, :remote_timeout, 100)
+
+      assert {:error, {:malla_rpc_error, _}} =
+               Malla.remote(CallTestService, :slow_function, [500])
+
+      Application.put_env(:malla, :remote_timeout, 2000)
+      assert :slow_done == Malla.remote(CallTestService, :slow_function, [200])
+    end
+  end
 end

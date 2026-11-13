@@ -24,6 +24,12 @@ defmodule CallTestService do
   # Function that raises an exception
   def raise_error(message), do: raise(RuntimeError, message: message)
 
+  # Answers after `ms` milliseconds
+  def slow_function(ms) do
+    Process.sleep(ms)
+    :slow_done
+  end
+
   # Callback that raises an exception
   defcb callback_raise_error(message), do: raise(RuntimeError, message: message)
 
