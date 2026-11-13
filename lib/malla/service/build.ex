@@ -181,8 +181,10 @@ defmodule Malla.Service.Build do
           atom when atom in [:cont, :continue] ->
             {rest, args}
 
-          # Continue with new args.
-          {atom, new_args} when atom in [:cont, :continue] ->
+          # Continue with new args. Only a list is an argument list: `{:cont, value}`
+          # with any other value falls to the next clause and becomes `[value]`,
+          # as process_continuation/4 does.
+          {atom, new_args} when atom in [:cont, :continue] and is_list(new_args) ->
             {rest, new_args}
 
           # Extract new args from tuple and continue.

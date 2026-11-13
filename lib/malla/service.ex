@@ -669,9 +669,14 @@ defmodule Malla.Service do
 
             other ->
               Malla.put_service_id(__MODULE__)
-              res = MallaDispatch.unquote(fun_name)(unquote_splicing(args))
-              Malla.put_service_id(other)
-              res
+
+              # Restore the caller's service id even if the callback raises or
+              # exits, so the calling process does not go on running as this service.
+              try do
+                MallaDispatch.unquote(fun_name)(unquote_splicing(args))
+              after
+                Malla.put_service_id(other)
+              end
           end
         end
       end
