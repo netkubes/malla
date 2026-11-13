@@ -516,7 +516,7 @@ defmodule Malla.Service.Server do
   end
 
   defp config_invalid_opts(config) do
-    invalid = [:otp_app, :class, :vsn, :global, :paused, :silent]
+    invalid = [:otp_app, :class, :vsn, :global, :paused, :silent, :priority]
 
     case Enum.find(config, fn {key, _val} -> if key in invalid, do: key end) do
       nil -> :ok
