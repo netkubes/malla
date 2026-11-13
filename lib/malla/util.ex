@@ -34,6 +34,17 @@ defmodule Malla.Util do
   #   end
   # end
 
+  @doc """
+  Returns `term` as is. The type checker then sees any term instead of a
+  value fixed at compile time (a config read into a module attribute, a
+  switch that is off for now), so the branches for other values are not
+  reported as dead.
+  """
+  @spec dynamic(term) :: term
+  # A plain identity would carry the type of `term` across modules; the
+  # process dictionary key is never set, so this always returns `term`.
+  def dynamic(term), do: Process.get({__MODULE__, :dynamic}, term)
+
   def join_dots(nil), do: ""
 
   def join_dots(str) when is_binary(str), do: str

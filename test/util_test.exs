@@ -40,4 +40,11 @@ defmodule Malla.UtilTest do
       assert Util.keyword_merge([a: [x: 1]], a: 5) == [a: 5]
     end
   end
+
+  describe "dynamic/1" do
+    test "returns its argument unchanged" do
+      assert Malla.Util.dynamic(:off) == :off
+      assert Malla.Util.dynamic(%{a: 1}) == %{a: 1}
+    end
+  end
 end
