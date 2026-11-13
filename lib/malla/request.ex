@@ -194,7 +194,11 @@ defmodule Malla.Request do
 
     span "request-out", service_id: service_id, labels: [operation: fun] do
       # remote_service = if op == :force_service_error, do: :no_service, else: remote_service
-      info("REQ for #{srv} '#{fun}' (#{inspect(args)}) [#{inspect(opts)}]")
+      # Arguments may carry secrets: logged through Malla.Util.redact_args/2
+      info(
+        "REQ for #{srv} '#{fun}' (#{inspect(Malla.Util.redact_args(fun, args))}) [#{inspect(opts)}]"
+      )
+
       base_span = Malla.Tracer.get_base()
       # Pass the base span under both keys for backward compatibility: the
       # request-in side reads :base_span and falls back to :trace_base (the

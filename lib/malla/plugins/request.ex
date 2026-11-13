@@ -174,7 +174,10 @@ defmodule Malla.Plugins.Request do
         span "request-in",
           base: base,
           labels: [operation: fun] do
-          info("REQ Incoming #{service}: '#{fun}' (#{inspect(args)})")
+          # Arguments may carry secrets: logged through Malla.Util.redact_args/2
+          info(
+            "REQ Incoming #{service}: '#{fun}' (#{inspect(Malla.Util.redact_args(fun, args))})"
+          )
 
           {result, data} =
             case apply(srv_id, fun, args) do

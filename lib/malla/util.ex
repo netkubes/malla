@@ -107,6 +107,73 @@ defmodule Malla.Util do
 
   defp keyword_merge_resolve(_key, _left, right), do: right
 
+  ## ===================================================================
+  ## Redaction of secrets in logs
+  ## ===================================================================
+
+  @secret_key ~r/pass|secret|token|credential|api_?key|private_?key|hmac_?key|enc_?key/i
+  # The password in a URL's user info: `scheme://user:password@host`.
+  @url_password ~r{(://[^/:@\s]*:)[^@/\s]+@}
+
+  @doc """
+    Hides the values of secret-looking keys (`password`, `secret`, `token`,
+    `credential`, `api_key`, `hmac_key`, `enc_key`, …) anywhere inside maps, keyword lists, lists
+    and tuples, and the password of any URL (`ecto://user:pass@host`), so
+    the term can be logged. Structs are kept as they are.
+  """
+  @spec redact(term) :: term
+
+  def redact(%{__struct__: _} = term), do: term
+
+  def redact(term) when is_map(term),
+    do: Map.new(term, fn {key, value} -> redact_pair(key, value) end)
+
+  def redact(term) when is_list(term) do
+    Enum.map(term, fn
+      {key, value} when is_atom(key) or is_binary(key) -> redact_pair(key, value)
+      value -> redact(value)
+    end)
+  end
+
+  def redact(term) when is_tuple(term),
+    do: term |> Tuple.to_list() |> redact() |> List.to_tuple()
+
+  def redact(term) when is_binary(term),
+    do: Regex.replace(@url_password, term, "\\1[redacted]@")
+
+  def redact(term), do: term
+
+  @doc """
+    The arguments of a call `fun`, ready to be logged: all of them hidden when
+    the name of the function says it handles a secret (`set_password`,
+    `check_password`, `login`, `verify_token`, …), since the secret is
+    then a positional argument with no key to recognise it by;
+    `redact/1` otherwise.
+  """
+  @spec redact_args(atom | String.t(), term) :: term
+
+  def redact_args(fun, args) do
+    if secret_name?(fun), do: "[redacted]", else: redact(args)
+  end
+
+  @doc "Whether a key or function name looks like it holds a secret."
+  @spec secret_name?(term) :: boolean
+
+  def secret_name?(name) when is_atom(name) or is_binary(name) do
+    name = to_string(name)
+    Regex.match?(@secret_key, name) or Regex.match?(~r/(^|_|\.)login($|_|\.)/, name)
+  end
+
+  def secret_name?(_), do: false
+
+  defp redact_pair(key, value) when is_atom(key) or is_binary(key) do
+    if Regex.match?(@secret_key, to_string(key)),
+      do: {key, "[redacted]"},
+      else: {key, redact(value)}
+  end
+
+  defp redact_pair(key, value), do: {key, redact(value)}
+
   # @type status :: Malla.Status.user_status()
 
   # @doc """
