@@ -21,18 +21,31 @@
 defmodule Malla.Util do
   @moduledoc false
 
-  # def validate_app!(schema, app) do
-  #   config = Application.get_all_env(app)
+  # Defined only when the application depends on :nimble_options (optional for Malla).
+  if Code.ensure_loaded?(NimbleOptions) do
+    @doc """
+    Validates the environment of application `app` against a `NimbleOptions`
+    `schema` and writes the validated values back (defaults included), so the
+    rest of the application reads them with `Application.get_env/3`.
 
-  #   case NimbleOptions.validate(config, schema) do
-  #     {:ok, opts} ->
-  #       for {key, val} <- opts, do: Application.put_env(app, key, val)
-  #       :ok
+    Raises if the configuration is not valid. Meant for `c:Application.start/2`.
+    Available only when the application depends on `:nimble_options`, an optional
+    dependency of Malla.
+    """
+    @spec validate_app!(NimbleOptions.schema() | NimbleOptions.t(), atom) :: :ok
+    def validate_app!(schema, app) do
+      config = Application.get_all_env(app)
 
-  #     {:error, error} ->
-  #       raise "Error validating config for app #{app}: #{inspect(error)}"
-  #   end
-  # end
+      case NimbleOptions.validate(config, schema) do
+        {:ok, opts} ->
+          for {key, val} <- opts, do: Application.put_env(app, key, val)
+          :ok
+
+        {:error, error} ->
+          raise "Error validating config for app #{app}: #{inspect(error)}"
+      end
+    end
+  end
 
   @doc """
   Returns `term` as is. The type checker then sees any term instead of a

@@ -47,4 +47,31 @@ defmodule Malla.UtilTest do
       assert Malla.Util.dynamic(%{a: 1}) == %{a: 1}
     end
   end
+
+  describe "validate_app!/2" do
+    @app :malla_validate_app_test
+
+    setup do
+      on_exit(fn ->
+        for {key, _} <- Application.get_all_env(@app), do: Application.delete_env(@app, key)
+      end)
+    end
+
+    test "writes the validated values back, defaults included" do
+      Application.put_env(@app, :size, 3)
+      schema = [size: [type: :integer], mode: [type: :atom, default: :fast]]
+
+      assert Malla.Util.validate_app!(schema, @app) == :ok
+      assert Application.get_env(@app, :mode) == :fast
+      assert Application.get_env(@app, :size) == 3
+    end
+
+    test "raises on an invalid config" do
+      Application.put_env(@app, :size, "three")
+
+      assert_raise RuntimeError, ~r/Error validating config/, fn ->
+        Malla.Util.validate_app!([size: [type: :integer]], @app)
+      end
+    end
+  end
 end

@@ -40,6 +40,8 @@ defmodule Malla.MixProject do
   defp deps do
     [
       {:telemetry, "~> 1.3"},
+      # Only for Malla.Util.validate_app!/2: an application that calls it lists it too
+      {:nimble_options, "~> 1.0", optional: true},
       {:ex_doc, "~> 0.40", only: :dev},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
