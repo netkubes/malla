@@ -43,6 +43,20 @@ defmodule Malla.Service.Server do
   def get_all_local(),
     do: for({pid, values} <- Malla.Registry.values(__MODULE__), do: Map.put(values, :pid, pid))
 
+  @doc """
+  Drains every service running on this node, in `:priority` order (lowest first,
+  see `Malla.Service.__using__/1`), and returns `true` when all of them report drained.
+
+  It stops at the first service that is not drained yet, so the services after it
+  keep working; call it again until it returns `true`.
+  """
+  @spec drain_all_local() :: boolean
+  def drain_all_local() do
+    get_all_local()
+    |> Enum.sort_by(&Map.get(&1, :priority, 0))
+    |> Enum.all?(&Malla.Service.drain(&1.id))
+  end
+
   @doc false
   @spec get_all_global_pids() :: [pid]
   def get_all_global_pids(), do: :pg.get_members(Malla.Services2, :all)
@@ -165,7 +179,8 @@ defmodule Malla.Service.Server do
         values = %{
           id: srv_id,
           class: class,
-          hash: state.hash
+          hash: state.hash,
+          priority: state.service.priority
         }
 
         _ref1 = Malla.Registry.store(__MODULE__, values)
@@ -687,7 +702,12 @@ defmodule Malla.Service.Server do
                 {:ok, {pid, opts}}
 
               {:error, error} ->
-                log(state, :warning, plugin, "Could not start child supervisor: #{inspect(error)}")
+                log(
+                  state,
+                  :warning,
+                  plugin,
+                  "Could not start child supervisor: #{inspect(error)}"
+                )
 
                 {:error, :child_sup_error}
             end

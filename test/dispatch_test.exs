@@ -57,3 +57,22 @@ defmodule DispatchTest do
     end
   end
 end
+
+defmodule DrainPriorityTest do
+  use ExUnit.Case, async: false
+
+  test "use Malla.Service takes :priority out of the config" do
+    defmodule DrainPriorityTest.Svc do
+      use Malla.Service, priority: 10, other: 1
+    end
+
+    service = DrainPriorityTest.Svc.service()
+    assert service.priority == 10
+    refute Keyword.has_key?(service.config, :priority)
+    assert service.config[:other] == 1
+  end
+
+  test "the default priority is 0" do
+    assert DispatchTest.Service.service().priority == 0
+  end
+end

@@ -63,6 +63,8 @@ defmodule Malla.Service do
             start_paused: boolean,
             # if true, suppress messages to console about service start/stop/reconfigure
             silent: boolean,
+            # order in which Malla.Service.Server.drain_all_local/0 drains it (lowest first)
+            priority: integer,
             wait_for_services: [id],
             # Chain of plugins, in the order they will be called (first top-level)
             plugin_chain: [module],
@@ -80,6 +82,7 @@ defmodule Malla.Service do
             global: false,
             start_paused: false,
             silent: false,
+            priority: 0,
             wait_for_services: [],
             plugin_chain: [],
             config: [],
@@ -429,6 +432,9 @@ defmodule Malla.Service do
     * `:global` - Whether the service is globally visible.
     * `:paused` - Whether to start in paused state.
     * `:silent` - Whether to suppress console messages about service start/stop/reconfigure.
+    * `:priority` - Integer, default `0`. Order in which `Malla.Service.Server.drain_all_local/0`
+      drains the local services: lowest first. Give a higher value to services that must keep
+      working while the others drain, such as the HTTP server answering the drain itself.
     * `:plugins` - List of plugin modules this services _depends_ on.
 
   Any other key is considered configuration for the service. See [Configuration](guides/07-configuration.md).
@@ -447,6 +453,8 @@ defmodule Malla.Service do
           | {:paused, boolean}
           # if true, suppress console messages about service lifecycle
           | {:silent, boolean}
+          # drain order on this node, lowest first
+          | {:priority, integer}
           | {:plugins, [module]}
           | {atom, any}
 

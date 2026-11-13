@@ -40,9 +40,19 @@ defmodule Malla.Service.Make do
       # wait_for_services: Keyword.get(use_spec, :wait_for_services, []),
       global: Keyword.get(use_spec, :global, false),
       silent: Keyword.get(use_spec, :silent, false),
+      priority: Keyword.get(use_spec, :priority, 0),
       plugins: Keyword.get(use_spec, :plugins, []),
       config:
-        Keyword.drop(use_spec, [:class, :vsn, :global, :paused, :silent, :wait_for_services, :plugins])
+        Keyword.drop(use_spec, [
+          :class,
+          :vsn,
+          :global,
+          :paused,
+          :silent,
+          :priority,
+          :wait_for_services,
+          :plugins
+        ])
     }
     # Expand the plugin list into a dependency-ordered chain.
     |> expand_plugins()

@@ -36,8 +36,9 @@ defmodule Malla.Plugins.Httpd.Lifecycle do
     (with the offending service id in the body) otherwise. Typically used as
     a Kubernetes readiness probe so the pod is added to the service network
     only once it is ready.
-  * `GET /stop` — drains every locally started service via
-    `Malla.Service.drain/1`, and once all are drained invokes the
+  * `GET /stop` — first invokes `c:httpd_lifecycle_drain_start/0`, then drains
+    every locally started service via `Malla.Service.Server.drain_all_local/0`
+    (in each service's `:priority` order, lowest first), and once all are drained invokes the
     `c:httpd_lifecycle_drain/0` callback to let services run any additional
     shutdown work. Replies `200` on success or `500` after ten failed retries
     (one second apart). Typically wired to the Kubernetes pre-stop hook so
@@ -74,13 +75,26 @@ defmodule Malla.Plugins.Httpd.Lifecycle do
 
   defcb httpd_request(_name, :get, "/is_ready", _data), do: services() |> is_ready()
 
-  defcb httpd_request(_name, :get, "/stop", _data), do: drain()
+  defcb httpd_request(_name, :get, "/stop", _data) do
+    Malla.local(:httpd_lifecycle_drain_start, [])
+    drain()
+  end
 
   defcb httpd_request(_name, _method, _path, _data), do: :cont
 
   ## ===================================================================
   ## Offered callbacks
   ## ===================================================================
+
+  @doc """
+  Invoked once by the `GET /stop` endpoint before any service is drained, so the
+  node can announce it is going away: report not ready, stop consumers, close
+  listeners that should not take new work. Its return value is ignored.
+
+  The default implementation does nothing.
+  """
+  @callback httpd_lifecycle_drain_start() :: any
+  defcb httpd_lifecycle_drain_start(), do: :ok
 
   @doc """
   Invoked by the `GET /stop` endpoint once every local service has been
@@ -143,10 +157,8 @@ defmodule Malla.Plugins.Httpd.Lifecycle do
     {:reply, code: 500}
   end
 
-  defp drain_all_local() do
-    services()
-    |> Enum.all?(&Malla.Service.drain/1)
-  end
+  # In `:priority` order, see Malla.Service.Server.drain_all_local/0
+  defp drain_all_local(), do: Malla.Service.Server.drain_all_local()
 
   defp is_live([]) do
     {:reply, code: 200}
