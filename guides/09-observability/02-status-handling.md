@@ -57,7 +57,14 @@ Some of the built-in patterns include:
 | `:timeout` | 408 | Timeout |
 | `:internal_error` | 500 | Internal error |
 | `:not_implemented` | 501 | Not implemented |
-| `:service_not_available` | 503 | Service not available |
+| `:service_not_available` | 500 | RPC service unavailable |
+
+An exception raised on a remote node (`{:malla_rpc_error, {exception, text}}`, see
+`Malla.remote/4`) has no built-in pattern on purpose: through `Malla.Status.public/2` it
+reaches `c:Malla.Plugins.Status.status_public/1`, which logs it under a reference and
+answers `"internal_error"`, so its text never reaches the client. A service that wants
+a specific status for some exceptions (a database timeout, say) adds a `status/1`
+clause for `{:malla_rpc_error, {exception, _text}}`.
 
 ### Defining Custom Statuses
 

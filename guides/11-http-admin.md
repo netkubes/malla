@@ -96,7 +96,7 @@ directly into Malla's readiness and drain callbacks:
 | `GET /node` | `node()` | Debug / identity |
 | `GET /is_live` | `Malla.Service.is_live?/1` on every local service | `livenessProbe` |
 | `GET /is_ready` | `Malla.Service.is_ready?/1` on every local service | `readinessProbe` |
-| `GET /stop` | `Malla.Service.drain/1` on every local service, then `httpd_lifecycle_drain/0` | `preStop` hook |
+| `GET /stop` | `httpd_lifecycle_drain_start/0`, then `Malla.Service.drain_all_local/0` (by `:priority`, lowest first), then `httpd_lifecycle_drain/0` | `preStop` hook |
 
 ```elixir
 defmodule MyService do
@@ -140,6 +140,13 @@ Utilities for working with `data`:
 Malla.Plugins.Httpd.get_headers(data)  # => [{"host", "..."}, ...]
 Malla.Plugins.Httpd.get_body(data)     # => "request body as binary"
 ```
+
+### `httpd_lifecycle_drain_start/0` — optional
+
+Overridable when using `Malla.Plugins.Httpd.Lifecycle`. Called once by `/stop`
+before any service drains: the place to report not ready, stop consumers or close
+listeners that should take no new work. Its return value is ignored; the default
+does nothing.
 
 ### `httpd_lifecycle_drain/0` — optional
 

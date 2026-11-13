@@ -27,7 +27,8 @@ defmodule MyApp.MyService do
   use Malla.Service,
     global: true,              # Register in cluster for remote discovery
     plugins: [MyApp.MyPlugin], # Plugins to include
-    vsn: "1.0.0"              # Version for compatibility
+    vsn: "1.0.0",             # Version for compatibility
+    priority: 0               # Drain order on the node, lowest first (default 0)
 
   # Regular function - callable remotely but NOT in the callback chain
   def my_function(arg), do: {:ok, arg}
@@ -140,7 +141,15 @@ Malla.remote(RemoteService, :function_name, [arg1, arg2], timeout: 5000)
 
 # Macro syntax
 Malla.call RemoteService.function_name(arg1, arg2), timeout: 5000
+
+# Cast to every node of the service, no answer awaited
+Malla.Node.call_cb_all(RemoteService, :function_name, [arg1], timeout: 0)
 ```
+
+The default timeout is `config :malla, :remote_timeout` (15 000 ms when not set).
+No node with the service: `{:error, :malla_service_not_available}`. A remote
+exception: `{:error, {:malla_rpc_error, {exception, text}}}`; its text is never put
+in a public `Malla.Status`.
 
 ## Starting Services
 

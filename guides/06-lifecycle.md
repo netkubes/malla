@@ -259,6 +259,26 @@ Malla.Service.stop(MyService)
 
 **Important**: Plugins should return `:cont` when fully drained to allow the chain to continue, or `false` if they still have work to complete. The drain can be called multiple times until all plugins report completion.
 
+### Draining every service of a node
+
+`Malla.Service.drain_all_local/0` drains all the services running on the
+node, in the order of their `:priority` option (lowest first, default `0`), and
+returns `true` once all of them are drained. It stops at the first service that is
+not drained yet, so the ones after it keep working; call it again until it returns
+`true`. Give a higher priority to services that must outlive the others, such as
+the HTTP server that answers the drain request:
+
+```elixir
+defmodule MyHttp do
+  use Malla.Service,
+    plugins: [Malla.Plugins.Httpd.Lifecycle],
+    priority: 1000
+end
+```
+
+`GET /stop` of `Malla.Plugins.Httpd.Lifecycle` uses it (see
+[HTTP Admin Server](11-http-admin.md)).
+
 ## Error Handling
 
 If a service's supervised child crashes and the supervisor's restart strategy is exhausted, the service itself will crash.

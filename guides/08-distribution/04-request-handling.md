@@ -427,7 +427,8 @@ end
 ### Common Error Statuses
 
 - `"service_not_available"` - Target service not running
-- `"internal_error"` - Unexpected exception occurred
+- `"internal_error"` - Unexpected exception occurred (on the remote node too: the exception
+  text is logged under a reference, never sent back; see `c:Malla.Plugins.Status.status_public/1`)
 - `"timeout"` - Request timed out
 - `"not_found"` - Resource not found
 - `"validation_failed"` - Input validation failed
@@ -435,6 +436,14 @@ end
 - `"forbidden"` - Authorization failed
 
 See the [Status Handling guide](../09-observability/02-status-handling.md) for more details.
+
+## Logging
+
+Both sides log each request at `info` level (`REQ for ...` and `REQ Incoming ...`).
+The arguments are logged through `Malla.Util.redact_args`: all of them are hidden
+when the function name says it handles a secret (`set_password`, `login`, ...), and
+otherwise the values of secret-looking keys (`password`, `token`, `secret`, `api_key`,
+...) and the password of any URL are replaced by `"[redacted]"`.
 
 ## Telemetry
 

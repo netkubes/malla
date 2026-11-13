@@ -17,9 +17,11 @@ See `AGENTS.md` in this same directory for the full current API.
 | 3 | `Malla.Plugin.maybe_restart/3` removed | Replace with inline compare |
 | 4 | `Malla.Plugin.merge_config/4` and `merge_config_multi/4` removed | Replace with `plugin_config_merge/3` (lifecycle) |
 | 5 | `service_merge_config/2` chain callback removed | Use `plugin_config_merge/3` |
-| 6 | `Malla.Service.Server.is_live?/is_ready?/drain/drain_all_local` moved / removed | `Malla.Service.is_live?/is_ready?/drain`; manual loop for drain-all |
+| 6 | `Malla.Service.Server.is_live?/is_ready?/drain` moved | `Malla.Service.is_live?/is_ready?/drain`; `drain_all_local/0` stays (by `:priority` since 0.0.1-rc.3) |
 | 7 | `Malla.callback/2,3` deprecated | Use `Malla.local/2,3` |
-| 8 | `NimbleOptions` no longer transitive via Malla | Declare it directly |
+| 8 | `NimbleOptions` no longer transitive via Malla | Declare it directly (also needed for `Malla.Util.validate_app!`) |
+| 9 | Request and call helpers renamed | `sreq` → `Malla.Request.request`, `cb_all_async` → `Malla.Node.call_cb_all(…, timeout: 0)` |
+| 10 | Error atoms prefixed | `:service_not_available` → `:malla_service_not_available` (from `Malla.Node` / `Malla.remote/4`) |
 
 `Malla.put_service_id/1`, `Malla.Service.Server.get_all_local/0`, and the
 service-module dispatch syntax (`srv_id.my_callback(args)`) are **unchanged**.
@@ -159,8 +161,10 @@ Return values:
 **Gotcha — multi-entry keys (`merge_config_multi/4` protocol).** The old API
 supported multiple entries under the same config key, identified by `:name`,
 with a `$delete: true` flag for removals. The current framework finishes the
-merge phase with `Keyword.merge(config, update)`, which collapses duplicate
-keys. That means the `:name` / `$delete` reconfigure protocol cannot be
+merge phase with a deep keyword merge (`Malla.Util.keyword_merge/2`), which
+collapses duplicate keys. A single entry per key merges as before, but nothing
+adds the default `:name` that `merge_config_multi/4` used to put: a plugin that
+relies on it sets it in `plugin_config/2`. That means the `:name` / `$delete` reconfigure protocol cannot be
 faithfully preserved. Two acceptable migration paths:
 
 1. **Drop runtime multi-entry reconfigure.** Keep multi-entry support at
@@ -180,20 +184,8 @@ Both are simpler than the old protocol and cover the common cases.
 | `Malla.Service.Server.is_live?(srv_id)` | `Malla.Service.is_live?(srv_id)` |
 | `Malla.Service.Server.is_ready?(srv_id)` | `Malla.Service.is_ready?(srv_id)` |
 | `Malla.Service.Server.drain(srv_id)` | `Malla.Service.drain(srv_id)` |
-| `Malla.Service.Server.drain_all_local()` | _removed_ — iterate manually |
+| `Malla.Service.Server.drain_all_local()` | _unchanged_, also as `Malla.Service.drain_all_local/0`; drains by each service's `:priority`, lowest first |
 | `Malla.Service.Server.get_all_local()` | _unchanged_ |
-
-Manual drain-all replacement:
-
-```elixir
-# BEFORE
-Malla.Service.Server.drain_all_local()
-
-# AFTER
-Malla.Service.Server.get_all_local()
-|> Enum.map(& &1.id)
-|> Enum.all?(&Malla.Service.drain/1)
-```
 
 ---
 
@@ -217,7 +209,8 @@ Signatures are identical; only the name changed.
 
 Older Malla releases pulled in `nimble_options` as a transitive dep. It is no
 longer declared. If your plugin uses it (common in `plugin_config/2` schema
-validation), add it to the consuming app's `mix.exs`:
+validation), or the app calls `Malla.Util.validate_app!` (defined only when
+`nimble_options` is present), add it to the consuming app's `mix.exs`:
 
 ```elixir
 defp deps do
@@ -227,6 +220,36 @@ defp deps do
   ]
 end
 ```
+
+---
+
+## 9. Renamed request and call helpers
+
+```elixir
+# BEFORE
+Malla.Request.sreq(MyService, :op, [args], opts)
+Malla.Request.sreq!(MyService, :op, [args], opts)
+Malla.Node.cb_all_async(MyService, :fun, [args])
+
+# AFTER
+Malla.Request.request(MyService, :op, [args], opts)
+Malla.Request.request!(MyService, :op, [args], opts)
+Malla.Node.call_cb_all(MyService, :fun, [args], timeout: 0)
+```
+
+`call_cb_all/4` with `timeout: 0` casts to every node of the service and returns a
+list of `:ok` instead of a single `:ok`; it goes through `malla_cb_in/3`, so the
+remote side sets the service id and `service_cb_in/3` can instrument the call.
+
+---
+
+## 10. Prefixed error atoms
+
+`Malla.Node` and `Malla.remote/4` answer `{:error, :malla_service_not_available}`
+when no node runs the service. Code matching `{:error, :service_not_available}`
+on their result must match the prefixed atom. The public status string is still
+`"service_not_available"`. Exceptions keep their shape: `{:malla_rpc, …}` from
+`Malla.Node`, `{:malla_rpc_error, …}` from `Malla.remote/4`.
 
 ---
 
@@ -240,7 +263,9 @@ For each app being migrated:
    - `Malla.Plugin.maybe_restart`
    - `Malla.Plugin.merge_config` / `merge_config_multi`
    - `service_merge_config`
-   - `Malla.Service.Server.is_live?` / `is_ready?` / `drain` / `drain_all_local`
+   - `Malla.Service.Server.is_live?` / `is_ready?` / `drain`
+   - `sreq` / `sreq!` / `cb_all_async`
+   - `:service_not_available` matched on the result of `Malla.Node` or `Malla.remote/4`
    - `Malla.callback(`
    - `NimbleOptions` usage without a direct dep
 2. Apply the transformations above.

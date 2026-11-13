@@ -32,6 +32,12 @@ defmodule MyService do
 end
 ```
 
+Besides `global`, `plugins` and `vsn`, `use Malla.Service` accepts `class`,
+`otp_app`, `paused`, `silent` and `priority` (see `Malla.Service`); any other key
+is configuration. `priority` (an integer, default `0`) only sets the order in which
+`Malla.Service.drain_all_local/0` drains the services of a node, lowest
+first (see [Service Lifecycle](06-lifecycle.md)).
+
 ### Functions vs. Callbacks
 
 Services expose two types of operations:

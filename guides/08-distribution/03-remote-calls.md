@@ -107,12 +107,21 @@ call MyRemoteService.risky_operation(data),
 
 All options supported by `Malla.remote/4` are available:
 
-- `:timeout` - Request timeout in milliseconds (default: 15000)
+- `:timeout` - Request timeout in milliseconds (default: the `:remote_timeout` setting of
+  the `:malla` application, 15000 when not set: `config :malla, :remote_timeout, 20_000`)
 - `:sna_retries` - Number of retries when service is not available (default: 5)
 - `:excp_retries` - Number of retries on exceptions (default: 0)
 - `:retries_sleep_msec` - Sleep time between retries in milliseconds (default: 1000)
 
 **Important**: Be careful with `:excp_retries` as the request may have been partially processed on the remote side before the exception occurred.
+
+When the retries are spent, `Malla.remote/4` returns `{:error, {:malla_rpc_error, {exception, text}}}`.
+The text is for your logs only: `Malla.Status.public/2` does not put it in a public status
+(see [Status Handling](../09-observability/02-status-handling.md)).
+
+During an upgrade, a node on an older Malla may answer `:service_not_available` (without
+the `malla_` prefix); `Malla.Node` reads it as `:malla_service_not_available`, so the call
+still fails over to the next node.
 
 
 ### Calling All Nodes
@@ -122,4 +131,7 @@ You can also broadcast a call to *all* nodes running a service using `call_cb_al
 ```elixir
 # Returns a list of results from each node
 results = Malla.Node.call_cb_all(MyWorkerService, :perform_work, [work_item])
+
+# Fire and forget: one cast per node, nothing waits for the answers
+Malla.Node.call_cb_all(MyWorkerService, :invalidate_cache, [key], timeout: 0)
 ```
