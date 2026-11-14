@@ -19,7 +19,7 @@ defmodule CustomTracerPlugin do
   # - `:tracer_globals` - List of global attribute sets
   # - `:tracer_updates` - List of span updates
 
-  use Malla.Plugin
+  use Malla.Plugin, plugin_deps: [Malla.Plugins.Tracer]
 
   ## ===================================================================
   ## Callback Overrides
