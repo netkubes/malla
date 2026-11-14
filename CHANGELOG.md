@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `:ok` instead of crashing the service.
 - A service declared with `paused: true` starts with the `:pause` admin status
   (it was `:paused`, which is not a valid admin status).
+- When a plugin fails to start, the service stops exactly the plugins that
+  are running (their children supervisors included, top-level first) and goes
+  to `:failed` without a `:stopped` notification. Supervisors started in the
+  failed round are no longer left running untracked, and `plugin_stop/2` is no
+  longer called for plugins that never started. A plugin added at run-time
+  that fails stops only the plugins started for it.
 
 ## [0.0.1-rc.3] - 2026-11-13
 

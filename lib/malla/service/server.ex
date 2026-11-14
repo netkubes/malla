@@ -317,9 +317,9 @@ defmodule Malla.Service.Server do
           {:ok, state} ->
             {:noreply, state}
 
-          {:error, error} ->
+          {:error, error, state} ->
             log(state, :warning, "error starting plugins: #{inspect(error)}")
-            state = stop_plugins(state)
+            state = stop_running_plugins(state)
             {:noreply, update_status(state, {:error, error})}
         end
 
@@ -619,10 +619,12 @@ defmodule Malla.Service.Server do
       {:ok, state} ->
         _updated_state = update_status(state, :running)
 
-      {:error, error} ->
+      {:error, error, state} ->
         log(state, :warning, "error starting plugins: #{inspect(error)}")
-        _stopped_state = stop_plugins(state)
-        _updated_state = update_status(state, {:error, error})
+
+        state
+        |> stop_running_plugins()
+        |> update_status({:error, error})
     end
   end
 
@@ -645,14 +647,22 @@ defmodule Malla.Service.Server do
           {:ok, state} ->
             state
 
-          {:error, error} ->
+          {:error, error, failed_state} ->
             log(state, :warning, "error starting new plugins: #{inspect(error)}")
-            update_status(state, {:error, error})
+            # stop only the plugins started in this round, top-level first;
+            # the ones that were already running keep running
+            started = Enum.filter(plugins_to_start, &plugin_running?(failed_state, &1))
+
+            failed_state
+            |> stop_plugins(started)
+            |> update_status({:error, error})
         end
     end
   end
 
-  @spec start_plugins(%State{}, [term]) :: {:ok, %State{}} | {:error, term}
+  # On error, the returned state tracks the plugins started before the failing one,
+  # so the caller can stop them.
+  @spec start_plugins(%State{}, [term]) :: {:ok, %State{}} | {:error, term, %State{}}
 
   defp start_plugins(state, []), do: {:ok, state}
 
@@ -666,7 +676,7 @@ defmodule Malla.Service.Server do
             start_plugins(%State{state | plugins: plugins}, rest)
 
           {:error, error} ->
-            {:error, error}
+            {:error, error, state}
         end
 
       {sup, _opts} when is_pid(sup) or sup == :none ->
@@ -729,6 +739,15 @@ defmodule Malla.Service.Server do
     # stop first top plugins
     stop_plugins(state, service.plugin_chain) |> update_status(:stopped)
   end
+
+  # Stops, top-level first, the plugins of the chain that are running, without
+  # changing the running status. Used when a start fails.
+  defp stop_running_plugins(%State{service: service} = state) do
+    running = Enum.filter(service.plugin_chain, &plugin_running?(state, &1))
+    stop_plugins(state, running)
+  end
+
+  defp plugin_running?(%State{plugins: plugins}, plugin), do: Map.get(plugins, plugin) != nil
 
   @spec stop_plugins(%State{}, [term]) :: %State{}
 
