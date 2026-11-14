@@ -37,6 +37,12 @@ defmodule Malla.Plugins.HttpdTest do
     {:ok, _} = Routed.start_link()
     {:ok, _} = Probed.start_link()
 
+    # start_link/1 returns before the first status check starts the plugins (and
+    # opens the ports); this call is served after it, so the listeners are up.
+    for mod <- [MultiServer, Routed, Probed] do
+      {:ok, %{running_status: :running}} = Malla.Service.get_service_info(mod)
+    end
+
     on_exit(fn ->
       # `stop/0` calls into the service and the GenServer exits while
       # replying, so the call itself raises `:normal`. Swallow it.
