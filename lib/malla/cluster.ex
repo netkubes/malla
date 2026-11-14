@@ -117,7 +117,7 @@ defmodule Malla.Cluster do
       if not Enum.member?(nodes, node) do
         case Node.connect(node) do
           true ->
-            IO.puts("CONNECTED to #{node}")
+            Logger.info("CONNECTED to #{node}")
 
           _ ->
             # IO.puts("NOT CONNECTED to #{node}")

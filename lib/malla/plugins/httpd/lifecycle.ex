@@ -146,14 +146,14 @@ defmodule Malla.Plugins.Httpd.Lifecycle do
     rescue
       e ->
         text = Exception.format(:error, e, __STACKTRACE__)
-        IO.puts("Exception calling drain: #{text}, #{tries} tries left")
+        Logger.warning("Exception calling drain: #{text}, #{tries} tries left")
         Process.sleep(1000)
         drain(tries - 1)
     end
   end
 
   def drain(_tries) do
-    IO.puts("Too many retries, giving up on drain")
+    Logger.error("Too many retries, giving up on drain")
     {:reply, code: 500}
   end
 

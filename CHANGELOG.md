@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The internal `get_info_all` of the service server returns `[]` when there
   are no global services (it raised) and a proper list of infos otherwise.
 
+### Changed
+- `Malla.Cluster` (node connected) and `Malla.Plugins.Httpd.Lifecycle` (drain
+  errors) log through `Logger` instead of printing with `IO.puts`.
+
 ## [0.0.1-rc.3] - 2026-11-13
 
 ### Added
