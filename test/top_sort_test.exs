@@ -26,6 +26,20 @@ defmodule TopSortTest do
       end
     end
 
+    test "among items with no dependency between them, the first listed goes last" do
+      assert {:ok, [:c, :b, :a]} == top_sort([{:a, []}, {:b, []}, {:c, []}])
+      assert {:ok, [:a, :b, :c]} == top_sort([{:c, []}, {:b, []}, {:a, []}])
+    end
+
+    test "ties are broken by the input order, dependencies always go first" do
+      # :a goes last; then :b, listed before :x (only named as a dependency)
+      assert {:ok, [:x, :b, :a]} == top_sort([{:a, [:x]}, {:b, []}])
+      # with :x listed before :b, :x goes right below :a
+      assert {:ok, [:b, :x, :a]} == top_sort([{:a, [:x]}, {:x, []}, {:b, []}])
+      # a shared dependency goes below every item that needs it
+      assert {:ok, [:x, :c, :b, :a]} == top_sort([{:a, [:x]}, {:x, []}, {:b, []}, {:c, [:x]}])
+    end
+
     test "returns error for circular dependencies" do
       assert {:error, {:circular_dependencies, [:dw01, :dw04]}} == top_sort(lib2())
     end

@@ -92,7 +92,7 @@ defmodule Malla.Service.Make do
       |> add_all_deps(service, [], [], [])
 
     # Topologically sort the plugins based on dependencies to ensure correct startup order.
-    {:ok, sorted} = Malla.Service.TopSort.top_sort(all)
+    {:ok, sorted} = Malla.Service.TopSort.top_sort(declared_order(all, service))
 
     # Filter out optional plugins that are not actually used (not in real list).
     plugins =
@@ -108,6 +108,41 @@ defmodule Malla.Service.Make do
     # Update the service with the resolved plugin chain, reversed for callback execution order.
     %Service{service | plugin_chain: Enum.reverse(plugins)}
   end
+
+  # Orders `all` for the topological sort, which breaks ties by this order: a
+  # depth-first walk from the service following `plugins:` and each plugin's
+  # `plugin_deps` in the order they are declared. So among plugins that do not
+  # depend on each other, the one declared first is called first, and each
+  # plugin's dependencies go right below it. Plugins the walk does not reach
+  # (Malla.Plugins.Base) keep their place after the others.
+  defp declared_order(all, %Service{id: srv_id} = service) do
+    keys = Map.new(all)
+    walked = all_declared([srv_id], service, keys, []) |> Enum.reverse()
+    rest = for {plugin, _deps} <- all, plugin not in walked, do: plugin
+    for plugin <- walked ++ rest, do: {plugin, Map.fetch!(keys, plugin)}
+  end
+
+  defp all_declared([], _service, _keys, seen), do: seen
+
+  defp all_declared([plugin | rest], service, keys, seen) do
+    if plugin in seen or not Map.has_key?(keys, plugin) do
+      all_declared(rest, service, keys, seen)
+    else
+      seen = all_declared(declared_deps(plugin, service), service, keys, [plugin | seen])
+      all_declared(rest, service, keys, seen)
+    end
+  end
+
+  defp declared_deps(srv_id, %Service{id: srv_id, plugins: plugins}), do: dep_names(plugins)
+
+  defp declared_deps(plugin, _service) do
+    case get_plugin_opts(plugin) do
+      {:ok, opts} -> dep_names(Keyword.get(opts, :plugin_deps, []))
+      _ -> []
+    end
+  end
+
+  defp dep_names(deps), do: for(dep <- deps, do: if(is_tuple(dep), do: elem(dep, 0), else: dep))
 
   # Plugins can declare they 'belong' to a 'group', for example:
   # `use Malla.Plugin, group: :group1`

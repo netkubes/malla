@@ -35,12 +35,40 @@ defmodule Malla.Service.TopSort do
           circular = top_sort_get_circular(vertices, digraph)
           {:error, {:circular_dependencies, circular}}
 
-        dep_list ->
-          {:ok, dep_list}
+        _dep_list ->
+          {:ok, stable_order(library, digraph)}
       end
     after
       true = :digraph.delete(digraph)
     end
+  end
+
+  # Kahn's algorithm over the (acyclic) digraph, building the result from the
+  # end: of the items no pending item depends on, the one that comes first in
+  # `library` is placed last (items only named as dependencies rank after the
+  # listed ones, in order of first mention). So among items not ordered by
+  # dependencies, the one listed first ends highest in a plugin chain (the chain
+  # is this result reversed). The result does not depend on how :digraph orders
+  # its vertices, which changes between Erlang/Elixir versions.
+  defp stable_order(library, digraph) do
+    ranked =
+      for({name, _deps} <- library, do: name) ++ for({_, deps} <- library, dep <- deps, do: dep)
+
+    rank = ranked |> Enum.uniq() |> Enum.with_index() |> Map.new()
+    pending = Enum.sort_by(:digraph.vertices(digraph), &Map.fetch!(rank, &1))
+    place(pending, digraph, %{}, [])
+  end
+
+  defp place([], _digraph, _placed, acc), do: acc
+
+  defp place(pending, digraph, placed, acc) do
+    # edges go from a dependency to its dependent
+    next =
+      Enum.find(pending, fn item ->
+        Enum.all?(:digraph.out_neighbours(digraph, item), &Map.has_key?(placed, &1))
+      end)
+
+    place(List.delete(pending, next), digraph, Map.put(placed, next, true), [next | acc])
   end
 
   defp topsort_insert([], _digraph), do: :ok

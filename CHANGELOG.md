@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   order: each plugin depends on the previous one of its group in `plugins:`,
   so `[A, B, C]` starts `A -> B -> C` and callbacks run `C -> B -> A`. It was
   the reverse. Services that relied on the old order must reverse their list.
+- The plugin chain is deterministic: plugins that do not depend on each other
+  are called in the order of `plugins:` (the first one first), each plugin's
+  `plugin_deps` go right below it, and a shared dependency goes below every
+  plugin that needs it. Before, their order came from the tie-break of
+  `:digraph_utils.topsort/1` and could change between Elixir/OTP versions.
 - `Malla.Cluster` (node connected) and `Malla.Plugins.Httpd.Lifecycle` (drain
   errors) log through `Logger` instead of printing with `IO.puts`.
 - `Malla.Service.get_config/1` and `Malla.Service.get_status/1` each have their

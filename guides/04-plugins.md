@@ -97,6 +97,22 @@ graph TB
 
 Execution order: MyService → LoggingPlugin → AuthPlugin → Malla.Plugins.Base
 
+### Order of Independent Plugins
+
+Plugins that do not depend on each other keep the order of `plugins:`: the one
+declared first is called first. Each plugin's `plugin_deps` go right below it,
+and a dependency shared by several plugins goes below all of them:
+
+```elixir
+# PluginA and PluginC declare plugin_deps: [Shared]; PluginB has none
+use Malla.Service, plugins: [PluginA, PluginB, PluginC]
+# Execution order: MyService → PluginA → PluginB → PluginC → Shared → Malla.Plugins.Base
+```
+
+The order is the same on every Elixir/OTP version. When a plugin must be called
+before another one, declare it with `plugin_deps` rather than relying on the
+order of `plugins:`.
+
 ### Optional Dependencies
 
 You can mark a dependency as optional. The plugin will be included only if it can be found in the codebase.

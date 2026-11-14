@@ -452,7 +452,9 @@ defmodule Malla.Service do
     * `:priority` - Integer, default `0`. Order in which `Malla.Service.drain_all_local/0`
       drains the local services: lowest first. Give a higher value to services that must keep
       working while the others drain, such as the HTTP server answering the drain itself.
-    * `:plugins` - List of plugin modules this services _depends_ on.
+    * `:plugins` - List of plugin modules this services _depends_ on. Plugins that do not
+      depend on each other are called in this order, the first one first
+      (see [Plugins](guides/04-plugins.md)).
 
   Any other key is considered configuration for the service. See [Configuration](guides/07-configuration.md).
   """
