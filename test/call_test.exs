@@ -670,8 +670,15 @@ defmodule CallTest do
       on_exit(fn ->
         Application.delete_env(:malla, :remote_timeout)
 
+        # The service was started by the (now finished) test process, so it may
+        # be shutting down with it while we call stop/0.
         if Process.whereis(CallTestService) do
-          CallTestService.stop()
+          try do
+            CallTestService.stop()
+          catch
+            :exit, _ -> :ok
+          end
+
           Process.sleep(100)
         end
       end)
