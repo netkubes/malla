@@ -180,6 +180,7 @@ defmodule Malla.RuntimePluginsTest do
       start_chain = Malla.Service.get(TestService, :start_chain, [])
       assert PluginA in start_chain
       assert PluginB in start_chain
+
       assert Enum.find_index(start_chain, &(&1 == PluginA)) <
                Enum.find_index(start_chain, &(&1 == PluginB))
     end

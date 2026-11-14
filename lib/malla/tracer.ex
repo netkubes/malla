@@ -543,9 +543,17 @@ defmodule Malla.Tracer do
     # values keep the runtime branch.
     data =
       cond do
-        is_list(data) -> data
-        match?({:%{}, _, _}, data) -> quote(do: Map.to_list(unquote(data)))
-        true -> quote(do: (d = unquote(data); if(is_map(d), do: Map.to_list(d), else: d)))
+        is_list(data) ->
+          data
+
+        match?({:%{}, _, _}, data) ->
+          quote(do: Map.to_list(unquote(data)))
+
+        true ->
+          quote do
+            d = unquote(data)
+            if is_map(d), do: Map.to_list(d), else: d
+          end
       end
 
     quote do
