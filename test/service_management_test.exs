@@ -589,7 +589,7 @@ defmodule Malla.ServiceManagementTest do
       assert :paused == PausedService.get_status()
 
       {:ok, info} = Malla.Service.get_service_info(PausedService)
-      assert info.admin_status == :paused
+      assert info.admin_status == :pause
       assert info.running_status == :paused
 
       # Activate the service

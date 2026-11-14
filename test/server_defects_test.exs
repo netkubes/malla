@@ -12,6 +12,10 @@ defmodule Malla.ServerDefectsTest do
     use Malla.Service, plugins: []
   end
 
+  defmodule PausedService do
+    use Malla.Service, paused: true, plugins: []
+  end
+
   defp stop_service(srv_id) do
     if Process.whereis(srv_id) do
       try do
@@ -36,6 +40,30 @@ defmodule Malla.ServerDefectsTest do
       assert DelPluginService.service().plugins == []
 
       DelPluginService.stop()
+    end
+  end
+
+  describe "paused: true" do
+    setup do
+      on_exit(fn -> stop_service(PausedService) end)
+    end
+
+    test "starts with the :pause admin status, and setting :pause again is a no-op" do
+      {:ok, _pid} = PausedService.start_link()
+
+      assert {:ok, %{admin_status: :pause, running_status: :paused, last_status_reason: "init"}} =
+               Malla.Service.get_service_info(PausedService)
+
+      assert :ok == PausedService.set_admin_status(:pause, :again)
+
+      assert {:ok, %{admin_status: :pause, running_status: :paused, last_status_reason: "init"}} =
+               Malla.Service.get_service_info(PausedService)
+
+      assert :ok == PausedService.set_admin_status(:active, :resume)
+      Process.sleep(50)
+      assert :running == PausedService.get_status()
+
+      PausedService.stop()
     end
   end
 end

@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `Malla.Service.del_plugin/2` with a plugin the service does not have returns
   `:ok` instead of crashing the service.
+- A service declared with `paused: true` starts with the `:pause` admin status
+  (it was `:paused`, which is not a valid admin status).
 
 ## [0.0.1-rc.3] - 2026-11-13
 

@@ -145,7 +145,7 @@ defmodule Malla.Service.Server do
 
     {admin_status, running_status} =
       if paused do
-        {:paused, :pausing}
+        {:pause, :pausing}
       else
         {:active, :starting}
       end
