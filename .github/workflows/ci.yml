@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - elixir: "1.17"
+            otp: "27"
+          - elixir: "1.18"
+            otp: "27"
+          - elixir: "1.19"
+            otp: "28"
+          # The entry that also checks formatting, runs Dialyzer and builds the docs
+          - elixir: "1.20"
+            otp: "29"
+            lint: true
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      - name: Cache deps and _build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            mix-${{ runner.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-
+
+      - name: mix deps.get
+        run: mix deps.get
+
+      # The formatter's output changes between Elixir versions: check it on one only
+      - name: mix format --check-formatted
+        if: matrix.lint
+        run: mix format --check-formatted
+
+      - name: mix compile --warnings-as-errors
+        run: mix compile --warnings-as-errors
+
+      - name: mix test
+        run: mix test
+
+      - name: Cache Dialyzer PLT
+        if: matrix.lint
+        uses: actions/cache@v4
+        with:
+          # project PLT (mix.exs) and dialyxir's core PLTs (in MIX_HOME)
+          path: |
+            priv/plts
+            ~/.mix/dialyxir_*.plt
+          key: plt-${{ runner.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            plt-${{ runner.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-
+
+      - name: mix dialyzer
+        if: matrix.lint
+        env:
+          MIX_ENV: dev
+        run: |
+          mkdir -p priv/plts
+          mix dialyzer --format github
+
+      - name: mix docs
+        if: matrix.lint
+        env:
+          MIX_ENV: dev
+        run: mix docs
