@@ -97,6 +97,10 @@ defmodule Malla.ServerDefectsTest do
     use Malla.Service, plugins: []
   end
 
+  defmodule GlobalInfoService do
+    use Malla.Service, global: true, plugins: []
+  end
+
   defp stop_service(srv_id) do
     if Process.whereis(srv_id) do
       try do
@@ -259,6 +263,32 @@ defmodule Malla.ServerDefectsTest do
                StartBadPluginsService.start_link(plugins: [Malla.ServerDefectsTest.NoSuchPlugin])
 
       refute Process.whereis(StartBadPluginsService)
+    end
+  end
+
+  describe "get_info_all/0" do
+    setup do
+      on_exit(fn -> stop_service(GlobalInfoService) end)
+    end
+
+    test "returns a list of service infos, empty when there are no global services" do
+      if Malla.Service.Server.get_all_global_pids() == [] do
+        assert [] == Malla.Service.Server.get_info_all()
+      end
+
+      {:ok, _pid} = GlobalInfoService.start_link()
+
+      infos = Malla.Service.Server.get_info_all()
+      assert is_list(infos)
+      assert Enum.all?(infos, &is_map/1)
+      assert Enum.any?(infos, &match?(%{id: GlobalInfoService}, &1))
+
+      GlobalInfoService.stop()
+      Process.sleep(50)
+
+      if Malla.Service.Server.get_all_global_pids() == [] do
+        assert [] == Malla.Service.Server.get_info_all()
+      end
     end
   end
 end

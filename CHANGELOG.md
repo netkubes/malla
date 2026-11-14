@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Malla.Service.reconfigure/2` and `Malla.Service.add_plugin/3` (with
   `config:`) return `{:error, reason}`, and `start_link` fails with
   `{:error, reason}` instead of raising inside `init`.
+- The internal `get_info_all` of the service server returns `[]` when there
+  are no global services (it raised) and a proper list of infos otherwise.
 
 ## [0.0.1-rc.3] - 2026-11-13
 

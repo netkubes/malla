@@ -68,7 +68,7 @@ defmodule Malla.Service.Server do
   @doc false
   def get_info_all do
     get_all_global_pids()
-    |> Enum.reduce(fn pid, acc ->
+    |> Enum.reduce([], fn pid, acc ->
       try do
         {:ok, info} = Malla.Service.get_service_info(pid)
         [info | acc]
