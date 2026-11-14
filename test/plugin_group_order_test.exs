@@ -1,13 +1,9 @@
 defmodule Malla.PluginGroupOrderTest do
   @moduledoc false
-  # Pins the CURRENT behaviour of plugin groups (`use Malla.Plugin, group: :g`).
-  #
-  # For `plugins: [A, B, C]` all in one group, the code builds the chain
-  # Service -> A -> B -> C (A calls first, C is started first). The comment in
-  # `Malla.Service.Make` (add_group_deps), the `:group` typedoc of `Malla.Plugin`
-  # and guides/04-plugins.md describe the opposite (Service -> C -> B -> A,
-  # started A -> B -> C). This test records what the code does today; if the
-  # ordering is changed on purpose, update it together with the docs.
+  # Ordering of plugin groups (`use Malla.Plugin, group: :g`), as documented in
+  # the `:group` typedoc of `Malla.Plugin` and guides/04-plugins.md: for
+  # `plugins: [A, B, C]` all in one group, each plugin depends on the previous
+  # one, so they start A -> B -> C and callbacks run Service -> C -> B -> A.
 
   use ExUnit.Case, async: false
 
@@ -75,15 +71,15 @@ defmodule Malla.PluginGroupOrderTest do
   end
 
   test "plugin_chain order of a group declared as [A, B, C]" do
-    assert GroupService.service().plugin_chain == [GroupService, A, B, C, Malla.Plugins.Base]
+    assert GroupService.service().plugin_chain == [GroupService, C, B, A, Malla.Plugins.Base]
   end
 
-  test "a shared defcb is invoked Service -> A -> B -> C" do
+  test "a shared defcb is invoked Service -> C -> B -> A" do
     assert :cont == GroupService.group_trace()
-    assert Trace.take() == [GroupService, A, B, C]
+    assert Trace.take() == [GroupService, C, B, A]
   end
 
-  test "plugins are started C -> B -> A" do
+  test "plugins are started A -> B -> C" do
     Application.put_env(:malla, :plugin_group_order_test_pid, self())
 
     on_exit(fn ->
@@ -104,7 +100,7 @@ defmodule Malla.PluginGroupOrderTest do
     assert_received {:started, first}
     assert_received {:started, second}
     assert_received {:started, third}
-    assert [first, second, third] == [C, B, A]
+    assert [first, second, third] == [A, B, C]
 
     GroupService.stop()
   end

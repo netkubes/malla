@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are no global services (it raised) and a proper list of infos otherwise.
 
 ### Changed
+- Plugin groups (`use Malla.Plugin, group: ...`) now follow the documented
+  order: each plugin depends on the previous one of its group in `plugins:`,
+  so `[A, B, C]` starts `A -> B -> C` and callbacks run `C -> B -> A`. It was
+  the reverse. Services that relied on the old order must reverse their list.
 - `Malla.Cluster` (node connected) and `Malla.Plugins.Httpd.Lifecycle` (drain
   errors) log through `Logger` instead of printing with `IO.puts`.
 - `Malla.Service.get_config/1` and `Malla.Service.get_status/1` each have their

@@ -113,21 +113,18 @@ defmodule Malla.Service.Make do
   # `use Malla.Plugin, group: :group1`
   #
   # All plugins in the same 'group' are chained to enforce an ordering among
-  # them. For a service declaring
+  # them: each one depends on the previous plugin of its group in the declared
+  # list. For a service declaring
   # `use MallaService, plugins: [PluginA, PluginB, PluginC]` (all in the same
-  # group), the resulting callback execution order is:
+  # group), PluginB depends on PluginA and PluginC on PluginB, so they start
+  # PluginA -> PluginB -> PluginC and the callback execution order is:
   #   MyService -> PluginC -> PluginB -> PluginA
-  # (i.e. the reverse of the declaration order, after the service module)
-  # (see guides/04-plugins.md). NOTE: the list is processed in reverse below and
-  # the raw dependency edges built here are flipped again by the topological sort
-  # (and by get_callbacks/2), so the local edge direction is NOT the final chain
-  # order — rely on the documented end result above, not on the edges built here.
-  # Adds group-based dependencies to plugins, ensuring intra-group ordering.
-  # Processes plugins in reverse to build dependencies from last to first in group.
-  defp add_group_deps(plugins), do: add_group_deps(Enum.reverse(plugins), [], %{})
+  # (see guides/04-plugins.md).
+  # Plugins are processed in declaration order; the result keeps that order.
+  defp add_group_deps(plugins), do: add_group_deps(plugins, [], %{})
 
-  # Base case: no more plugins, return accumulated list.
-  defp add_group_deps([], acc, _groups), do: acc
+  # Base case: no more plugins, return accumulated list in declaration order.
+  defp add_group_deps([], acc, _groups), do: Enum.reverse(acc)
 
   # Convert atom plugin to tuple with empty deps.
   defp add_group_deps([plugin | rest], acc, groups) when is_atom(plugin),
