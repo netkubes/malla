@@ -159,36 +159,24 @@ defmodule Malla.Service.Server do
       service: service
     }
 
-    # If runtime plugins provided, rebuild the plugin chain
-    state =
-      case runtime_plugins do
-        nil ->
-          state
-
-        plugins when is_list(plugins) ->
-          case do_update_plugin_chain(plugins, state) do
-            {:ok, state} -> state
-            {:error, error} -> raise "Failed to set runtime plugins: #{inspect(error)}"
-          end
-      end
-
+    # If runtime plugins provided, rebuild the plugin chain;
     # we first apply otp_app config, if present
     # then we apply on top this update
-    case init_config(state, update) do
-      {:ok, state} ->
-        values = %{
-          id: srv_id,
-          class: class,
-          hash: state.hash,
-          priority: state.service.priority
-        }
+    with {:ok, state} <- maybe_update_plugin_chain(runtime_plugins, state),
+         {:ok, state} <- init_config(state, update) do
+      values = %{
+        id: srv_id,
+        class: class,
+        hash: state.hash,
+        priority: state.service.priority
+      }
 
-        _ref1 = Malla.Registry.store(__MODULE__, values)
-        _ref2 = Malla.Registry.store({__MODULE__, srv_id}, {class, state.hash})
-        log(state, :info, "server started")
-        send(self(), :timed_check_status)
-        {:ok, state}
-
+      _ref1 = Malla.Registry.store(__MODULE__, values)
+      _ref2 = Malla.Registry.store({__MODULE__, srv_id}, {class, state.hash})
+      log(state, :info, "server started")
+      send(self(), :timed_check_status)
+      {:ok, state}
+    else
       {:error, error} ->
         {:stop, error}
     end
@@ -433,21 +421,9 @@ defmodule Malla.Service.Server do
 
     {runtime_plugins, update} = Keyword.pop(update, :plugins)
 
-    state =
-      case runtime_plugins do
-        nil ->
-          state
-
-        plugins when is_list(plugins) ->
-          case do_update_plugin_chain(plugins, state) do
-            {:ok, state} -> state
-            {:error, error} -> raise "Failed to set runtime plugins: #{inspect(error)}"
-          end
-      end
-
-    %State{service: %Service{} = service} = state
-
-    with :ok <- config_invalid_opts(update),
+    with {:ok, %State{service: %Service{} = service} = state} <-
+           maybe_update_plugin_chain(runtime_plugins, state),
+         :ok <- config_invalid_opts(update),
          {:ok, config} <-
            call_plugin_config_merge(service.plugin_chain, srv_id, service.config, update) do
       service = %Service{service | config: config}
@@ -492,21 +468,9 @@ defmodule Malla.Service.Server do
     # Extract runtime plugins before checking invalid opts
     {runtime_plugins, update} = Keyword.pop(update, :plugins)
 
-    state =
-      case runtime_plugins do
-        nil ->
-          state
-
-        plugins when is_list(plugins) ->
-          case do_update_plugin_chain(plugins, state) do
-            {:ok, state} -> state
-            {:error, error} -> raise "Failed to set runtime plugins: #{inspect(error)}"
-          end
-      end
-
-    %State{service: %Service{} = service} = state
-
-    with :ok <- config_invalid_opts(update),
+    with {:ok, %State{service: %Service{} = service} = state} <-
+           maybe_update_plugin_chain(runtime_plugins, state),
+         :ok <- config_invalid_opts(update),
          {:ok, config} <-
            call_plugin_config_merge(service.plugin_chain, srv_id, service.config, update),
          service = %Service{service | config: config},
@@ -899,6 +863,11 @@ defmodule Malla.Service.Server do
         {:reply, {:error, error}, state}
     end
   end
+
+  defp maybe_update_plugin_chain(nil, state), do: {:ok, state}
+
+  defp maybe_update_plugin_chain(plugins, state) when is_list(plugins),
+    do: do_update_plugin_chain(plugins, state)
 
   defp do_update_plugin_chain(plugins, %State{} = state) do
     try do

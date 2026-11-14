@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failed round are no longer left running untracked, and `plugin_stop/2` is no
   longer called for plugins that never started. A plugin added at run-time
   that fails stops only the plugins started for it.
+- A `plugins:` list that cannot be built no longer crashes the service:
+  `Malla.Service.reconfigure/2` and `Malla.Service.add_plugin/3` (with
+  `config:`) return `{:error, reason}`, and `start_link` fails with
+  `{:error, reason}` instead of raising inside `init`.
 
 ## [0.0.1-rc.3] - 2026-11-13
 

@@ -85,6 +85,18 @@ defmodule Malla.ServerDefectsTest do
     end
   end
 
+  defmodule ReconfigureService do
+    use Malla.Service, plugins: []
+  end
+
+  defmodule AddPluginConfigService do
+    use Malla.Service, plugins: []
+  end
+
+  defmodule StartBadPluginsService do
+    use Malla.Service, plugins: []
+  end
+
   defp stop_service(srv_id) do
     if Process.whereis(srv_id) do
       try do
@@ -196,6 +208,57 @@ defmodule Malla.ServerDefectsTest do
       refute_received {:plugin_stop, FailNewPluginService, FailPlugin}
 
       FailNewPluginService.stop()
+    end
+  end
+
+  describe "a runtime plugin list that cannot be built" do
+    setup do
+      on_exit(fn ->
+        stop_service(ReconfigureService)
+        stop_service(AddPluginConfigService)
+        stop_service(StartBadPluginsService)
+      end)
+    end
+
+    test "reconfigure/2 returns the error and the service keeps running" do
+      {:ok, pid} = ReconfigureService.start_link()
+
+      assert {:error, _} =
+               ReconfigureService.reconfigure(plugins: [Malla.ServerDefectsTest.NoSuchPlugin])
+
+      assert Process.alive?(pid)
+
+      assert {:ok, %{running_status: :running}} =
+               Malla.Service.get_service_info(ReconfigureService)
+
+      assert ReconfigureService.service().plugins == []
+
+      ReconfigureService.stop()
+    end
+
+    test "add_plugin/3 with config: returns the error and the service keeps running" do
+      {:ok, pid} = AddPluginConfigService.start_link()
+
+      assert {:error, _} =
+               Malla.Service.add_plugin(AddPluginConfigService, PlainPlugin,
+                 config: [plugins: [Malla.ServerDefectsTest.NoSuchPlugin]]
+               )
+
+      assert Process.alive?(pid)
+
+      assert {:ok, %{running_status: :running}} =
+               Malla.Service.get_service_info(AddPluginConfigService)
+
+      AddPluginConfigService.stop()
+    end
+
+    test "start_link/1 fails with the error" do
+      Process.flag(:trap_exit, true)
+
+      assert {:error, %RuntimeError{message: "Cannot find plugin " <> _}} =
+               StartBadPluginsService.start_link(plugins: [Malla.ServerDefectsTest.NoSuchPlugin])
+
+      refute Process.whereis(StartBadPluginsService)
     end
   end
 end
