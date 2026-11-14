@@ -286,6 +286,9 @@ defmodule Malla.Service.Server do
 
     if Enum.member?(service.plugins, plugin) do
       do_update_plugins(service.plugins -- [plugin], state)
+    else
+      # not a plugin of this service: nothing to remove (idempotent, like add_plugin)
+      {:reply, :ok, state}
     end
   end
 
