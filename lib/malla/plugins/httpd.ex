@@ -92,7 +92,8 @@ defmodule Malla.Plugins.Httpd do
   end
 
   @doc "Utility to call from `c:httpd_request/4` to get the body body"
-  @spec get_body(request_data) :: String.t()
+  # inets hands the body as a charlist, the only shape List.to_string/1 is given here
+  @spec get_body(record(:mod_cb, entity_body: charlist())) :: String.t()
   def get_body(mod_cb(entity_body: body)),
     do: List.to_string(body)
 
