@@ -146,10 +146,10 @@ defmodule Malla.Service do
     do: GenServer.call(srv_id, :get_service_info, timeout)
 
   @doc """
-  Get current running status.
+  Get current service config, after every plugin's `c:Malla.Plugin.plugin_config/2`.
 
-  This is cached so it is very fast, but it could be slightly outdated
-  on service status changes.
+  It is read from a cache the service updates when it starts and on each
+  reconfiguration, so it is very fast. Returns `:unknown` if the service is not running.
   """
 
   @spec get_config(Malla.id()) :: keyword() | :unknown
@@ -161,6 +161,13 @@ defmodule Malla.Service do
       :unknown
     end
   end
+
+  @doc """
+  Get current running status.
+
+  This is cached so it is very fast, but it could be slightly outdated
+  on service status changes. Returns `:unknown` if the service is not running.
+  """
 
   @spec get_status(Malla.id()) :: running_status | :unknown
   def get_status(srv_id) do

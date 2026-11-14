@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `Malla.Cluster` (node connected) and `Malla.Plugins.Httpd.Lifecycle` (drain
   errors) log through `Logger` instead of printing with `IO.puts`.
+- `Malla.Service.get_config/1` and `Malla.Service.get_status/1` each have their
+  own doc (the status doc was on `get_config/1`).
 
 ## [0.0.1-rc.3] - 2026-11-13
 
