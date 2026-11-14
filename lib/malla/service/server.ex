@@ -178,6 +178,7 @@ defmodule Malla.Service.Server do
       {:ok, state}
     else
       {:error, error} ->
+        restore_dispatch(state)
         {:stop, error}
     end
   end
@@ -231,6 +232,7 @@ defmodule Malla.Service.Server do
         end
 
       {:error, error} ->
+        restore_dispatch(state)
         {:reply, {:error, error}, state}
     end
   end
@@ -250,15 +252,17 @@ defmodule Malla.Service.Server do
           # Config provided: first add plugin to chain, then apply config
           # We need the plugin in the chain so its plugin_config callbacks can process the config
           case do_update_plugin_chain([plugin | service.plugins], state) do
-            {:ok, state} ->
+            {:ok, new_state} ->
               # Now apply the config with the plugin in the chain
-              case do_reconfigure(state, config) do
-                {:ok, state} ->
+              case do_reconfigure(new_state, config) do
+                {:ok, new_state} ->
                   # Trigger status check to start the plugins with the new config
                   send(self(), :check_status)
-                  {:reply, :ok, state}
+                  {:reply, :ok, new_state}
 
                 {:error, error} ->
+                  # the plugin is not added: keep the previous state and dispatch module
+                  restore_dispatch(state)
                   {:reply, {:error, error}, state}
               end
 
@@ -861,6 +865,19 @@ defmodule Malla.Service.Server do
 
       {:error, error} ->
         {:reply, {:error, error}, state}
+    end
+  end
+
+  # A failed update may have recompiled the dispatch module with a plugin chain
+  # that was not kept: rebuild it from the service the state still holds.
+  defp restore_dispatch(%State{id: srv_id, service: service}) do
+    compiled = srv_id.service()
+
+    if compiled.plugin_chain != service.plugin_chain or compiled.callbacks != service.callbacks do
+      _ = Malla.Service.Build.recompile(service)
+      :ok
+    else
+      :ok
     end
   end
 

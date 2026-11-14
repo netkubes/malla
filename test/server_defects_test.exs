@@ -101,6 +101,18 @@ defmodule Malla.ServerDefectsTest do
     use Malla.Service, global: true, plugins: []
   end
 
+  defmodule AnswerPlugin do
+    use Malla.Plugin
+
+    defcb answer(), do: :from_plugin
+  end
+
+  defmodule RollbackService do
+    use Malla.Service, plugins: []
+
+    defcb answer(), do: :cont
+  end
+
   defp stop_service(srv_id) do
     if Process.whereis(srv_id) do
       try do
@@ -289,6 +301,47 @@ defmodule Malla.ServerDefectsTest do
       if Malla.Service.Server.get_all_global_pids() == [] do
         assert [] == Malla.Service.Server.get_info_all()
       end
+    end
+  end
+
+  describe "a plugin change whose config then fails" do
+    setup do
+      on_exit(fn -> stop_service(RollbackService) end)
+    end
+
+    test "add_plugin/3 with a bad config: leaves the dispatch module as it was" do
+      {:ok, _pid} = RollbackService.start_link()
+      assert :cont == RollbackService.answer()
+
+      assert {:error, {:key_not_allowed_in_service_start, :class}} =
+               Malla.Service.add_plugin(RollbackService, AnswerPlugin, config: [class: :other])
+
+      refute AnswerPlugin in RollbackService.service().plugin_chain
+      assert :cont == RollbackService.answer()
+
+      RollbackService.stop()
+    end
+
+    test "reconfigure/2 with plugins: and a bad config leaves the dispatch module as it was" do
+      {:ok, _pid} = RollbackService.start_link()
+
+      assert {:error, {:key_not_allowed_in_service_start, :class}} =
+               RollbackService.reconfigure(plugins: [AnswerPlugin], class: :other)
+
+      refute AnswerPlugin in RollbackService.service().plugin_chain
+      assert :cont == RollbackService.answer()
+
+      RollbackService.stop()
+    end
+
+    test "start_link/1 with plugins: and a bad config leaves the dispatch module as it was" do
+      Process.flag(:trap_exit, true)
+
+      assert {:error, {:key_not_allowed_in_service_start, :class}} =
+               RollbackService.start_link(plugins: [AnswerPlugin], class: :other)
+
+      refute AnswerPlugin in RollbackService.service().plugin_chain
+      assert :cont == RollbackService.answer()
     end
   end
 end

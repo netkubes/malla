@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{:error, reason}` instead of raising inside `init`.
 - The internal `get_info_all` of the service server returns `[]` when there
   are no global services (it raised) and a proper list of infos otherwise.
+- A plugin change whose config then fails (`Malla.Service.add_plugin/3` with
+  `config:`, `Malla.Service.reconfigure/2` or `start_link` with `plugins:`) no
+  longer leaves the dispatch module with the refused plugin chain, and
+  `add_plugin/3` no longer keeps the plugin in the service after replying with
+  the error.
 
 ### Changed
 - Plugin groups (`use Malla.Plugin, group: ...`) now follow the documented
