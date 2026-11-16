@@ -4,7 +4,7 @@ defmodule Malla.MixProject do
   def project do
     [
       app: :malla,
-      version: "0.0.1-rc.3",
+      version: "0.1.0",
       elixir: "~> 1.17",
       description: "Framework for developing distributed services in Elixir networks.",
       package: %{
@@ -16,7 +16,7 @@ defmodule Malla.MixProject do
         main: "introduction",
         name: "Malla",
         logo: "assets/logo.png",
-        source_ref: "main",
+        source_ref: "v0.1.0",
         source_url: "https://github.com/netkubes/malla",
         homepage_url: "https://github.com/netkubes/malla",
         extras: extras(),

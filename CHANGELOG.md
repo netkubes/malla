@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-16
+
 ### Fixed
 - `Malla.Service.del_plugin/2` with a plugin the service does not have returns
   `:ok` instead of crashing the service.

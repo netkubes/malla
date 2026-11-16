@@ -14,7 +14,7 @@ Add `malla` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:malla, ">= 0.0.0"}
+    {:malla, "~> 0.1"}
   ]
 end
 ```
