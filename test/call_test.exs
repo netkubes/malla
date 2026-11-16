@@ -114,9 +114,10 @@ defmodule CallTest do
       # Start service after a delay to test retry mechanism
       Task.start(fn ->
         Process.sleep(300)
-        {:ok, _pid} = CallTestService.start_link()
-        # Wait a bit more for service discovery to complete
-        Process.sleep(200)
+        {:ok, pid} = CallTestService.start_link()
+        # The service must outlive this task (a service shuts down with the
+        # process that started it); the test stops it at the end.
+        Process.unlink(pid)
       end)
 
       # This should retry and eventually succeed
@@ -208,9 +209,10 @@ defmodule CallTest do
       # Start service after a delay to test retry mechanism
       Task.start(fn ->
         Process.sleep(300)
-        {:ok, _pid} = CallTestService.start_link()
-        # Wait a bit more for service discovery to complete
-        Process.sleep(200)
+        {:ok, pid} = CallTestService.start_link()
+        # The service must outlive this task (a service shuts down with the
+        # process that started it); the test stops it at the end.
+        Process.unlink(pid)
       end)
 
       # This should retry and eventually succeed
