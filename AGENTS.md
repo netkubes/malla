@@ -33,16 +33,17 @@ iex --sname second --cookie malla_dev -S mix
 
 ### Plugin System with Compile-Time Callback Chaining
 
-Malla's architecture centers on a plugin system where behavior is composed through callback chains resolved at compile time (zero runtime overhead).
+Malla's architecture centers on a plugin system where behavior is composed through callback chains resolved at compile time into direct function calls: low overhead and no runtime lookup of who implements a callback. Each hop costs a function call and a `case` on the result, and chains of three or more modules walk a list with `apply/3`. Calling a callback from outside the service sets and restores the service id in the process dictionary. The dispatch module is recompiled when plugins are added or removed at runtime.
 
 **Callback Chain Flow:**
 1. Service modules (using `Malla.Service`) are themselves plugins
-2. Dependencies form a hierarchy: `Malla.Plugins.Base` (bottom) -> plugins -> your service module (top)
-3. Each callback invocation walks the chain from top to bottom until a plugin returns a non-`:cont` value
+2. Dependencies form a hierarchy: `Malla.Plugins.Base` (bottom) -> plugins -> your service module (top). A plugin sits above the plugins it depends on; independent plugins keep the order of `plugins:`
+3. Each callback invocation walks the chain from top to bottom until a module returns a non-`:cont` value. Only modules that define the callback are in its chain
 4. Plugins can return:
    - `:cont` - continue to next plugin with same args
-   - `{:cont, new_args}` or `{:cont, arg1, arg2}` - continue with modified args
+   - `{:cont, new_args}` or `{:cont, arg1, arg2}` - continue with modified args (a list replaces the whole argument list: wrap a single list argument as `{:cont, [list]}`)
    - Any other value - stop chain and return that value
+5. If the last module of the chain returns `:cont`/`{:cont, ...}`, that raw value goes back to the caller: the bottom of a chain must return a real value
 
 **Callback Definition:**
 - Use `defcb` instead of `def` for callbacks that participate in the chain
@@ -51,36 +52,40 @@ Malla's architecture centers on a plugin system where behavior is composed throu
 
 **Plugin Dependencies:**
 - Declare with `use Malla.Plugin, plugin_deps: [OtherPlugin]`
-- Optional dependencies: `plugin_deps: [{Plugin, optional: true}]`
-- Plugin groups ensure ordering: `use Malla.Plugin, group: :my_group`
+- Optional dependencies: `plugin_deps: [{Plugin, optional: true}]` (only orders the plugin if something else brings it in; it does not add it)
+- Plugin groups ensure ordering: `use Malla.Plugin, group: :my_group`. For `plugins: [A, B, C]` in one group they start A -> B -> C and their callbacks run C -> B -> A. Only plugins listed in the service's `plugins:` are chained
 
 ### Service Lifecycle
 
-Services have admin status (`:active`, `:pause`, `:inactive`) and running status (`:starting`, `:running`, `:paused`, `:stopped`, `:failed`).
+Services have admin status (`:active`, `:pause`, `:inactive`) and running status (`:starting`, `:running`, `:pausing`, `:paused`, `:stopping`, `:stopped`, `:failed`). `:failed` does not end the process: it retries starting its plugins every 5 seconds while the admin status is `:active`. `:priority` (option of `use Malla.Service`, default `0`) orders `Malla.Service.drain_all_local/0`, lowest first.
 
 **Lifecycle callbacks** (standard Elixir callbacks, NOT in the defcb chain):
-1. `plugin_config/2` - Top-level to bottom, each plugin can modify config for dependants
-2. `plugin_start/2` - Bottom to top, returns child_spec for supervised children
-3. `plugin_updated/3` - On reconfiguration, can trigger restart
-4. `plugin_stop/2` - Top to bottom, cleanup before children are stopped
-5. `plugin_module/1` - Compile-time only. Returns quoted code that is spliced into the service module (functions, attributes, submodules), parameterized by the compile-time `Malla.Service.t`. Top-level to bottom, runs after callback dispatch is generated. Use sparingly — only when behavior cannot be expressed as a normal callback or helper. Plugins that use it MUST document in their `@moduledoc` exactly what is injected (names/arities of functions, attributes, submodules).
+1. `plugin_config/2` - Top-level to bottom, each plugin can modify config for dependants (also on every reconfiguration)
+2. `plugin_config_merge/3` - Top to bottom, before `plugin_config/2`; the update is deep-merged on top of its result
+3. `plugin_start/2` - Bottom to top, returns child_spec for supervised children
+4. `plugin_updated/3` - On reconfiguration, can ask for a restart of that plugin (`{:ok, restart: true}`)
+5. `plugin_stop/2` - Top to bottom, cleanup before children are stopped
+6. `plugin_module/1` - Compile-time only. Returns quoted code that is spliced into the service module (functions, attributes, submodules), parameterized by the compile-time `Malla.Service.t`. Top-level to bottom, runs after callback dispatch is generated. Use sparingly — only when behavior cannot be expressed as a normal callback or helper. Plugins that use it MUST document in their `@moduledoc` exactly what is injected (names/arities of functions, attributes, submodules).
 
 ### Distributed Service Discovery
 
 - Services with `global: true` join process group `Malla.Services2` via `:pg`
 - Periodic health checks every 10 seconds track available services
-- `get_nodes/1` returns nodes running a service (local node first, rest randomized)
-- RPC via `call_cb/4` automatically routes to available nodes with failover
-- Virtual modules are created dynamically for transparent remote calls
+- `get_nodes/1` returns nodes running a service (local node first, the rest shuffled at each re-check, not per call)
+- `Malla.remote/4` (on top of `Malla.Node.call_cb/4`) tries the next node only when a node answers `{:error, :malla_service_not_available}`; an exception, timeout or lost connection comes back as `{:error, {:malla_rpc_error, {error, text}}}` and is not retried elsewhere (unless `excp_retries` is set, which re-runs the call)
+- Virtual modules (callbacks only, not plain `def` functions) are created dynamically for nodes that have no module of that name
+- `Malla.Cluster` is not started by Malla: add it to your supervision tree for `config :malla, connect: [...]` to work
 
 ### Key Modules
 
+Modules marked "internal" are `@moduledoc false`: they are for people working on Malla, not public API.
+
 - **Malla.Service** - Main service behavior and `use` macro, compiles plugin chains
 - **Malla.Plugin** - Plugin behavior and `defcb` macro
-- **Malla.Service.Server** - GenServer managing service lifecycle and status
-- **Malla.Service.Make** - Builds service structure from use_spec and callbacks
-- **Malla.Service.Build** - Generates optimized callback dispatch code
-- **Malla.Service.TopSort** - Topological sort for plugin dependency ordering
+- **Malla.Service.Server** (internal) - GenServer managing service lifecycle and status
+- **Malla.Service.Make** (internal) - Builds service structure from use_spec and callbacks
+- **Malla.Service.Build** (internal) - Generates optimized callback dispatch code
+- **Malla.Service.TopSort** (internal) - Topological sort for plugin dependency ordering
 - **Malla.Node** - Service discovery and RPC across cluster
 - **Malla.Cluster** - Node connection utilities via DNS/SRV
 - **Malla.Config** - ETS-based global config store
@@ -90,19 +95,19 @@ Services have admin status (`:active`, `:pause`, `:inactive`) and running status
 
 Each service gets an ETS table (named after the service module) for runtime data:
 - `Malla.Service.get/3`, `put/3`, `put_new/3`, `del/2`
-- Table destroyed when service stops
-- Service ID stored in process dictionary via `Malla.put_service_id/1`
+- Table owned by the service process, destroyed when it stops
+- Service ID stored in process dictionary via `Malla.put_service_id/1`; callbacks set it, plain functions called directly do not
 
 ### Configuration
 
-Services are configured through deep-merged layers:
+Services are configured through deep-merged layers (nested keyword lists are merged, maps and other values are replaced):
 1. Static config in `use Malla.Service, key: value`
 2. OTP app config (if `otp_app:` is specified)
 3. Runtime config in `start_link/1` or supervisor `child_spec/1`
 
-Plugin config macro supports:
-- `config key: value` - adds to root config
-- `config PluginName, opt: value` - namespaced config
+There is no `config` macro: any key of `use Malla.Service` that is not an option (`:class`, `:vsn`, `:global`, `:paused`, `:silent`, `:priority`, `:plugins`, `:otp_app`) is configuration, by convention under a key named after the plugin. A runtime config (start options, `otp_app` environment, `reconfigure/2`) with `:class`, `:vsn`, `:global`, `:paused`, `:silent`, `:priority` or `:otp_app` is refused with `{:error, {:key_not_allowed_in_service_start, key}}`.
+
+Settings of the `:malla` application: `:connect`, `:cluster`, `:remote_timeout` (default 15 000 ms for `Malla.remote/4`), `:log_min_level` (compile time), `:precompile`, `:default_service_id`.
 
 ## Code Patterns
 
@@ -188,7 +193,8 @@ defmodule MyApp.DatabasePlugin do
   end
 
   defcb service_is_ready?() do
-    case Malla.Service.get(__MODULE__, :pool_ready) do
+    # The service table is named after the service, not after the plugin
+    case Malla.Service.get(Malla.get_service_id!(), {__MODULE__, :pool_ready}) do
       true -> :cont
       _ -> false
     end
@@ -199,12 +205,12 @@ end
 ### Callback Chain Example
 
 ```elixir
-# Bottom of chain - provides default behavior
+# Bottom of chain - provides the default behavior and the final value
 defmodule MyApp.ValidationPlugin do
   use Malla.Plugin
 
   defcb process(data) do
-    if valid?(data), do: :cont, else: {:error, :invalid}
+    if valid?(data), do: {:ok, data}, else: {:error, :invalid}
   end
 end
 
@@ -328,7 +334,7 @@ Always run `mix format` before committing.
 - Bottom = `Malla.Plugins.Base` (default implementations)
 
 ### Lifecycle Callback Direction
-- `plugin_config/2` and `plugin_stop/2` run top-down (service first)
+- `plugin_config_merge/3`, `plugin_config/2` and `plugin_stop/2` run top-down (service first)
 - `plugin_start/2` and `plugin_updated/3` run bottom-up (deepest dependency first)
 
 ## Important Considerations
@@ -347,13 +353,20 @@ Always run `mix format` before committing.
 - Callback is registered in `@plugin_callbacks` module attribute
 
 ### Distributed Behavior
-- Service discovery is eventually consistent (10-second refresh)
-- RPC calls have 30-second default timeout
-- Local node is always preferred in `get_nodes/1` results
-- Virtual modules are created dynamically via `maybe_make_module/2`
+- Service discovery is eventually consistent (status pushes plus a 10-second re-check)
+- `Malla.remote/4` has a 15 000 ms default timeout (`config :malla, :remote_timeout`, read on each call); `Malla.Node.call/4` called directly defaults to 30 000 ms
+- `sna_retries` (default 5) and `retries_sleep_msec` (default 1000) apply when the service is not available; `excp_retries` (default 0) re-runs a call that raised or timed out
+- A remote exception is returned as `{:error, {:malla_rpc_error, {exception, text}}}`; the text is for logs only and never goes in a public `Malla.Status`
+- Local node is always first in `get_nodes/1` results
+- Virtual modules are created dynamically via `maybe_make_module/2` (internal), only when this node has no module with that name
 
 ### Service Status Management
 - Status cached in `:persistent_term` for fast reads
-- Status changes trigger plugin lifecycle callbacks
-- Failed services automatically retry startup
-- Use `set_admin_status/2` for controlled state transitions
+- Status changes trigger plugin lifecycle callbacks (`service_status_changed/1`)
+- Failed services keep their process and retry starting the plugins every 5 seconds while the admin status is `:active`
+- Use `set_admin_status/2` for controlled state transitions: `:pause` keeps plugins running but removes the service from discovery, `:inactive` stops the plugins and keeps the process
+- `Malla.Service.drain_all_local/0` drains every local service, ordered by `:priority`, lowest first
+
+### Runtime Plugin Changes
+- `add_plugin/3`, `del_plugin/2`, `reconfigure(plugins: ...)` and `start_link(plugins: ...)` rebuild the chain and recompile the dispatch module; the rebuilt chain (and the configuration at that moment) stays loaded after the service stops, so a restart without `plugins:` starts with it
+- Tests that change plugins should start the service with an explicit `plugins:` each time

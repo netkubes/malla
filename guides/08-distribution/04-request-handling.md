@@ -1,449 +1,405 @@
 # Request Handling
 
-Malla's _request handling system_ provides a structured protocol for inter-service communication across distributed nodes. It builds on top of the basic RPC mechanisms to add automatic service discovery, distributed tracing, standardized responses, retry logic, and plugin-based request interception.
+Malla's _request handling system_ is an optional protocol for inter-service communication. It builds on `Malla.remote/4` and adds a pair of spans that continue a trace across nodes, normalization of responses and errors into `Malla.Status`, telemetry, and a callback, `malla_request/3`, that plugins of the **called** service can use to intercept requests.
 
 ## Why Request Handling?
 
-While Malla provides basic remote call capabilities via `Malla.remote/4`, the request handling system adds critical features for production distributed systems:
+While Malla provides basic remote calls via `Malla.remote/4`, the request system adds:
 
-- **Standardized Responses**: Enforces consistent response formats across all services
-- **Distributed Tracing**: Automatic span propagation for observability
-- **Automatic Retries**: Configurable retry logic for transient failures
-- **Plugin Interception**: Cross-cutting concerns like authentication, rate limiting, and validation
-- **Telemetry Integration**: Built-in metrics for monitoring request/response patterns
-- **Error Normalization**: Consistent error handling via `Malla.Status`
+- **Standardized responses**: the answers of the called function are normalized into a small set of shapes, and errors into `t:Malla.Status.t/0`.
+- **Trace propagation**: the `request-out` span of the caller hands its context to the `request-in` span of the called service. (`Malla.remote/4` does not do this.) Real traces need a tracer plugin; see [Tracing](../09-observability/01-tracing.md).
+- **Interception on the called side**: cross-cutting concerns such as authentication, rate limiting and validation, as plugins of the service that receives the request.
+- **Telemetry**: `[:malla, :request, :out]` and `[:malla, :request, :in]` events.
+- **Error normalization**: a consistent error shape that does not leak internals (see "Errors" below).
 
-This makes inter-service communication predictable, observable, and maintainable at scale.
+The retry options are those of `Malla.remote/4` (`sna_retries`, `excp_retries`, `retries_sleep_msec`); there is nothing else on top of them.
 
-To use this system, you need to include plugin `Malla.Plugins.Request` both the calling and the called services. This plugin also depends on both
-`Malla.Plugins.Tracer` and `Malla.Plugins.Status`, since it uses both the [Tracing System ](../09-observability/01-tracing.md) and the [Status System](../09-observability/02-status-handling.md).
+## What you need
+
+- **The called service** needs `Malla.Plugins.Request`. The caller sends the request by calling the `malla_request/3` callback of the target; a service without the plugin has no such callback, and the call fails with an internal error.
+- **The calling service** needs `Malla.Tracer` and `Malla.Status` available, because `Malla.Request` calls `Malla.Tracer.span/3` and `Malla.Status.public/2` with its service ID. `Malla.Plugins.Request` depends on `Malla.Plugins.Tracer` and `Malla.Plugins.Status`, so listing it in the caller pulls both in.
+- **A service ID in the calling process.** `request/4` (and `req`) open a span for the calling service, so the process needs a service ID, or you must pass the `service_id:` option. Without one they raise `Malla.ServiceIdMissing`. Inside a `defcb` of the service the ID is already set. In a plain function, or in a process you spawned, call `Malla.put_service_id(MyService)` first or pass `service_id: MyService`.
 
 ## Basic Usage
 
 ### Simple Request/Response
 
-Start with basic inter-service communication using the `req` macro:
-
 ```elixir
-# Define a service that provides user data
-defmodule UserService do
+# A service that provides user data
+defmodule MyApp.UserService do
   use Malla.Service, global: true, plugins: [Malla.Plugins.Request]
 
-  def get_user(user_id) do
-    case Repo.get(User, user_id) do
-      nil -> {:error, :not_found}
-      user -> {:ok, user}
-    end
-  end
+  def get_user(1), do: {:ok, %{id: 1, name: "Ann"}}
+  def get_user(_id), do: {:error, :not_found}
 
-  def list_users() do
-    users = Repo.all(User)
-    {:ok, users}
-  end
+  def list_users(), do: {:ok, [%{id: 1, name: "Ann"}]}
 end
 
-# Call from another service
-defmodule APIService do
+# Call it from another service
+defmodule MyApp.APIService do
   use Malla.Service, plugins: [Malla.Plugins.Request]
-  import Malla.Request, only: [req: 1]
+  use Malla.Request   # imports the req macro
 
-  def fetch_user(user_id) do
-    # Use req to make the call - it handles routing, tracing, and error normalization
-    case req UserService.get_user(user_id) do
-      {:ok, user} -> 
-        {:ok, format_user(user)}
-      {:error, %Malla.Status{status: "not_found"}} -> 
+  # A callback: the service ID is set in the process
+  defcb fetch_user(user_id) do
+    case req MyApp.UserService.get_user(user_id) do
+      {:ok, user} ->
+        {:ok, user}
+
+      {:error, %Malla.Status{status: "not_found"}} ->
         {:error, :user_not_found}
     end
   end
-
-  def fetch_all_users() do
-    {:ok, users} = req UserService.list_users()
-    {:ok, Enum.map(users, &format_user/1)}
-  end
 end
 ```
 
-The `req` macro automatically:
-- Discovers which node is running `UserService`
-- Routes the call to that node
-- Creates distributed trace spans
-- Normalizes errors into `Malla.Status` structs
-- Emits telemetry metrics
+The functions that answer requests (`get_user/1`) are ordinary functions of the service module; they do not have to be callbacks. Anything the service module exports can be requested.
 
-### Alternative Syntax
+`req` finds a node running `MyApp.UserService`, with the same discovery as `Malla.remote/4`, and returns what `Malla.Request.request/4` returns.
 
-You can also use the explicit function form:
+> #### `req` takes the module name literally {: .warning}
+>
+> The `req` macro builds the service ID from the aliases as they are written, without expanding `alias` declarations. After `alias MyApp.UserService`, `req UserService.get_user(1)` asks for a service named `UserService` (not `MyApp.UserService`), which does not exist, and you get a `service_not_available` status. Write the full module name in `req`, or use the function form below, which takes the module as a normal argument. The expression must also be a literal module name: `req mod.get_user(1)` with a variable does not match.
+
+### Function Syntax
 
 ```elixir
-# Equivalent to: req UserService.get_user(123)
-Malla.Request.request(UserService, :get_user, [123])
+# Equivalent to: req MyApp.UserService.get_user(123)
+Malla.Request.request(MyApp.UserService, :get_user, [123])
 
 # With options
-Malla.Request.request(UserService, :get_user, [123], timeout: 10_000)
+Malla.Request.request(MyApp.UserService, :get_user, [123], timeout: 10_000)
 ```
+
+`Malla.Request.request!/4` is the same but it raises `Malla.Request.ReqError` when the service is not available (`type: :service_not_available`) or the answer is an internal error (`type: :internal_error`). Other errors (a `not_found`, for example) are returned, not raised.
 
 ## Response Protocol
 
-Request handlers should return one of these standardized formats:
+### What the called function returns
 
-### Success Responses
+The function that handles the request (running on the called service) must return one of:
+
+| Return value | What the caller gets |
+| :--- | :--- |
+| `:ok` | `{:ok, %{}}` |
+| `:created` | `{:created, %{}}` |
+| `{:ok, data}` / `{:created, data}`, `data` a map or a list | `{:ok, data}` / `{:created, data}` |
+| `{:error, term}` | `{:error, %Malla.Status{}}`, built from `term` (see below) |
+| `{:status, term}` | `{:status, %Malla.Status{}}`, built from `term` |
+| anything else (including `{:ok, "a string"}`) | `{:error, %Malla.Status{status: "internal_error", info: "Invalid request handler response"}}` |
+
+Note that a bare `:ok` reaches the caller as `{:ok, %{}}`, so `:ok = req Service.fun()` never matches; match `{:ok, _}`.
 
 ```elixir
-defmodule ProductService do
-  use Malla.Service, global: true
+defmodule MyApp.ProductService do
+  use Malla.Service, global: true, plugins: [Malla.Plugins.Request]
 
   # Success with no data
-  def health_check(_params) do
-    :ok
-  end
+  def health_check(), do: :ok
 
-  # Success with data (data must be a serializable map or list)
-  def get_product(product_id) do
-    product = Repo.get!(Product, product_id)
-    {:ok, product}
-  end
+  # Success with data (a map or a list)
+  def get_product(id), do: {:ok, %{id: id, stock: 7}}
 
   # Resource created with data
-  def create_product(params) do
-    {:ok, product} = Repo.insert!(Product.changeset(%Product{}, params))
-    {:created, product}
-  end
+  def create_product(params), do: {:created, %{id: 99, name: params.name}}
+
+  # Errors
+  def check_stock(_id, quantity) when quantity > 7, do: {:error, {:out_of_stock, 7}}
+  def check_stock(_id, _quantity), do: :ok
+
+  # Teach the status system about your own errors (see "Errors")
+  defcb status({:out_of_stock, available}),
+    do: [info: "Out of stock", code: 409, data: [available: available]]
+
+  defcb status(_), do: :cont
 end
 ```
 
-**Valid success responses:**
-- `:ok` - Success with no data
-- `:created` - Resource created with no data
-- `{:ok, data}` - Success with data
-- `{:created, data}` - Resource created with data
+### What the caller gets
 
-### Error Responses
+`request/4` returns `{tag, data}`, always a two-element tuple:
 
-```elixir
-defmodule ProductService do
-  use Malla.Service, global: true
+| Result | When |
+| :--- | :--- |
+| `{:ok, map_or_list}` / `{:created, map_or_list}` | success; `%{}` when the handler returned a bare `:ok`/`:created` |
+| `{:error, %Malla.Status{}}` | the handler returned `{:error, term}`, or something went wrong (see "Errors") |
+| `{:status, %Malla.Status{}}` | the handler returned `{:status, term}` |
 
-  def get_product(product_id) do
-    case Repo.get(Product, product_id) do
-      nil -> {:error, :not_found}
-      product -> {:ok, product}
-    end
-  end
-
-  def update_product(product_id, params) do
-    product = Repo.get!(Product, product_id)
-    
-    case Product.changeset(product, params) |> Repo.update() do
-      {:ok, updated} -> {:ok, updated}
-      {:error, changeset} -> {:error, {:validation_failed, changeset}}
-    end
-  end
-
-  def check_stock(product_id, quantity) do
-    product = Repo.get!(Product, product_id)
-    
-    if product.stock >= quantity do
-      :ok
-    else
-      {:status, {:insufficient_stock, available: product.stock}}
-    end
-  end
-end
-```
-
-**Valid error responses:**
-- `{:error, term}` - Error (normalized via `Malla.Status.public/1`, marks span as error)
-- `{:status, term}` - Custom status (normalized via `Malla.Status.public/1`)
-
-All errors are automatically converted to `t:Malla.Status.t/0` structs with standard fields.
+An error that is not a `%Malla.Status{}` when it reaches the caller (for example `{:error, :malla_service_not_available}` from the transport, or the bare reason an interceptor returned) is converted by the caller's own `Malla.Status.public/2`.
 
 ## How Requests Work
 
-### Request Flow
+When you call `req MyApp.UserService.get_user(123)`:
 
-When you call `req UserService.get_user(123)`:
+1. **Client side**:
+   - Opens a `request-out` span (in the calling service, via `Malla.Tracer.span/3`) and logs the request.
+   - Gets the context of the current span (`Malla.Tracer.get_base/0`) to send it along.
+   - Calls `malla_request(:get_user, [123], opts)` on the target with `Malla.remote/4`, so with its options (`timeout`, retries), or locally if you passed `direct: true`.
 
-1. **Client Side**:
-   - Creates a "request-out" span for distributed tracing
-   - Invokes `c:Malla.Plugins.Request.malla_request/3` callback (plugins can intercept here)
-   - Uses `Malla.remote/4` to make RPC call to the node running UserService
+2. **Server side** (on the called service): the `malla_request/3` callback chain runs. Plugins of that service can intercept it here. The default implementation, from `Malla.Plugins.Request`:
+   - Answers `{:error, :malla_service_not_available}` if the service is not `:running` (a paused service, for example).
+   - Opens a `request-in` span with the context received from the client as its base.
+   - Calls your function: `MyApp.UserService.get_user(123)`.
+   - Normalizes the answer as in the table above, with `Malla.Status.public/1` of the called service for errors.
+   - Emits `[:malla, :request, :in]` and returns `{tag, data}`.
 
-2. **Server Side**:
-   - Receives call to `c:Malla.Plugins.Request.malla_request/3`
-   - Creates "request-in" span (child of request-out span)
-   - Calls your function: `get_user(123)`
-   - Normalizes response via `Malla.Status`
-   - Emits telemetry metrics
-
-3. **Client Side (response)**:
-   - Receives normalized response
-   - Emits telemetry metrics
-   - Returns standardized result
-
-This creates a parent-child trace relationship across nodes for observability.
+3. **Client side** (the answer): the result is normalized as described above, `[:malla, :request, :out]` is emitted, and `{tag, data}` is returned.
 
 ## Request Options
 
-Both `req/2` and `request/4` accept options:
+`req` and `request/4` take the options of `Malla.remote/4`, plus `:direct` and `:service_id`. Everything else is passed to the called service and visible to its plugins:
 
 ```elixir
-# Timeout control
-req UserService.get_user(123), timeout: 5_000
+# Timeout of the call (default: config :malla, :remote_timeout, 15 000 ms)
+req MyApp.UserService.get_user(123), timeout: 5_000
 
-# Direct call (skip RPC, call locally - useful for testing)
-req UserService.get_user(123), direct: true
+# Do not use RPC: call malla_request/3 of the target module in this node
+req MyApp.UserService.get_user(123), direct: true
 
-# Pass custom options that plugins can access
-req UserService.create_user(params), 
-  auth_token: "abc123",
-  request_id: UUID.generate()
+# The service ID to use (the calling service), when the process has none
+Malla.Request.request(MyApp.UserService, :get_user, [123], service_id: MyApp.APIService)
 
-# All Malla.remote/4 options are supported
-req UserService.heavy_operation(data),
+# Retries of Malla.remote/4
+req MyApp.UserService.heavy_operation(data),
   timeout: 30_000,
-  retries: 3,
-  retry_delay: 1_000
+  sna_retries: 2,            # when the service is not available (default 5)
+  retries_sleep_msec: 500    # between retries (default 1000)
+  # excp_retries: 1          # re-run after an exception or timeout (default 0). Be careful.
+
+# Custom options for the plugins of the called service
+req MyApp.UserService.create_user(params),
+  auth_token: "abc123",
+  request_id: "r-1"
 ```
 
-See common options for `Malla.remote/4`. Custom options (like `:auth_token`) are passed through to plugins for interception logic.
+Custom options travel to the other node, so they must be plain terms. The called service receives all of them in the `opts` argument of `malla_request/3`, together with the trace context (under `:base_span`, and `:trace_base` for older plugins).
 
 ## Distributed Tracing
 
-Requests automatically propagate trace context across nodes:
+The `request-out` and `request-in` spans are linked: the caller gets the base context with `Malla.Tracer.get_base/0` and the called service opens its span with `base: <that context>` in the span options. What that context contains, and what is done with it, is up to the tracer plugin you use. With the default `Malla.Plugins.Tracer` the context is `nil`: spans only emit telemetry counters.
 
 ```elixir
-defmodule OrderService do
+defmodule MyApp.OrderService do
   use Malla.Service, plugins: [Malla.Plugins.Request]
-  import Malla.Request, only: [req: 1]
+  use Malla.Request
   use Malla.Tracer
 
-  def create_order(user_id, items) do
+  defcb create_order(user_id, items) do
     span [:order_service, :create_order] do
       info("Creating order", user_id: user_id, item_count: length(items))
 
-      # Each req call creates a child span in the distributed trace
-      {:ok, _user} = req UserService.get_user(user_id)
+      # Each req call is a request-out span, child of the span above
+      {:ok, _user} = req MyApp.UserService.get_user(user_id)
 
       Enum.each(items, fn item ->
-        :ok = req ProductService.check_stock(item.product_id, item.quantity)
+        {:ok, _} = req MyApp.ProductService.check_stock(item.product_id, item.quantity)
       end)
 
-      {:ok, payment} = req PaymentService.charge(user_id, calculate_total(items))
-
-      order = insert_order(user_id, items, payment)
-      {:created, order}
+      {:created, %{user_id: user_id}}
     end
   end
 end
 ```
 
-This creates a trace hierarchy:
+With a tracer plugin that understands the context, this produces a trace like:
 
 ```
 order_service:create_order (OrderService, node1)
   ├─ request-out → request-in (UserService, node2)
-  │   └─ user_service:get_user
   ├─ request-out → request-in (ProductService, node3)
-  │   └─ product_service:check_stock
-  ├─ request-out → request-in (ProductService, node3)
-  │   └─ product_service:check_stock
-  └─ request-out → request-in (PaymentService, node2)
-      └─ payment_service:charge
+  └─ request-out → request-in (ProductService, node3)
 ```
+
+Only `Malla.Request` propagates the context. A plain `Malla.remote/4` or a call through a virtual module does not.
 
 See the [Tracing guide](../09-observability/01-tracing.md) for more details.
 
 ## Plugin-Based Interception
 
-Plugins can intercept requests by implementing the `c:Malla.Plugins.Request.malla_request/3` callback, enabling cross-cutting concerns without modifying service code.
+Plugins implement `c:Malla.Plugins.Request.malla_request/3` to intercept requests. The callback runs **on the called service**, so the interceptor plugins (authentication, rate limiting, validation) belong in the `plugins:` of the service that receives the requests, not of the one that sends them. The calling service only needs `Malla.Plugins.Request`.
+
+An interceptor receives the name of the function, its arguments and the options of the request. It can return:
+
+- `:cont` to let the request go on;
+- `{:cont, [fun, args, opts]}` to go on with a modified request (all three, as a list);
+- anything else, which is returned to the caller **instead of calling your function**, as the answer of the request.
 
 ### Simple Authentication Plugin
 
 ```elixir
-defmodule AuthPlugin do
+defmodule MyApp.AuthPlugin do
   use Malla.Plugin, plugin_deps: [Malla.Plugins.Request]
-  use Malla.Tracer
 
   defcb malla_request(fun, args, opts) do
     case Keyword.get(opts, :auth_token) do
       nil ->
-        warning("Missing authentication token")
-        {:error, :missing_auth_token}
+        {:error, Malla.Status.public(:unauthorized)}
 
       token ->
-        case verify_token(token) do
-          {:ok, user_id} ->
-            info("Authenticated", user_id: user_id, operation: fun)
-            # Add user_id to opts for downstream use
-            opts = Keyword.put(opts, :user_id, user_id)
-            {:cont, [fun, args, opts]}
-
-          {:error, reason} ->
-            warning("Invalid token", reason: reason)
-            {:error, :unauthorized}
-        end
+        # Add the user to the options for the plugins below, and for the log
+        {:cont, [fun, args, Keyword.put(opts, :user_id, "user-" <> token)]}
     end
   end
-
-  defp verify_token(token), do: {:ok, extract_user_id(token)}
 end
 ```
 
-Add to your service:
+Add it to the service that receives the requests:
 
 ```elixir
-defmodule APIService do
+defmodule MyApp.UserService do
   use Malla.Service,
-    plugins: [Malla.Plugins.Request, AuthPlugin]
-  
-  use Malla.Request
+    global: true,
+    plugins: [MyApp.AuthPlugin, Malla.Plugins.Request]
 
-  def create_user(params) do
-    # AuthPlugin will verify the token before this runs
-    # If successful, opts will contain :user_id
-    req UserService.create_user(params), auth_token: get_auth_token()
-  end
+  def get_user(1), do: {:ok, %{id: 1, name: "Ann"}}
 end
 ```
+
+The caller only passes the token as an option:
+
+```elixir
+req MyApp.UserService.get_user(1), auth_token: token
+```
+
+**What an interceptor's error looks like to the caller.** The error returned by an interceptor does not go through the default `malla_request/3`, so it is not normalized on the called service. It reaches the caller as it was returned, and the caller turns it into a status with its own `status/1` clauses. A built-in reason such as `:unauthorized` works anywhere, but a custom reason such as `{:rate_limited, 5}` would become `"internal_error"` unless the *caller* also defines a clause for it. The simplest way to avoid that is for the interceptor to return a ready-made status, as above: a `%Malla.Status{}` is passed through as it is.
 
 ### Composing Multiple Plugins
 
-Plugins execute in order, allowing layered concerns:
+Interceptors form a normal callback chain: they are called in the order of the service's `plugins:` list, and the default implementation of `Malla.Plugins.Request` comes last, because each of them declares `plugin_deps: [Malla.Plugins.Request]`.
 
 ```elixir
-defmodule APIGatewayService do
+defmodule MyApp.APIGatewayService do
   use Malla.Service,
     global: true,
     plugins: [
-      ValidationPlugin,    # Runs first - validate input
-      AuthPlugin,          # Runs second - authenticate
-      RateLimitPlugin,     # Runs third - check rate limits
-      LoggingPlugin        # Runs fourth - log request
+      MyApp.ValidationPlugin,    # called first: validate input
+      MyApp.AuthPlugin,          # called second: authenticate (adds :user_id to opts)
+      MyApp.RateLimitPlugin      # called third: it can read :user_id
     ]
 
-  use Malla.Request
-
-  def create_user(params) do
-    # By the time we get here:
-    # - params have been validated
-    # - user has been authenticated
-    # - rate limit has been checked
-    # - request is being logged
-    
-    req UserService.create_user(params)
-  end
+  def create_user(params), do: {:created, params}
 end
 ```
 
+A plugin that needs the result of another one (the rate limiter needs the `:user_id` that the auth plugin adds) must be called **after** it. Remember that a plugin is called *before* the plugins it depends on, so `plugin_deps: [AuthPlugin]` would put the rate limiter *above* the auth plugin, which is the wrong way round. Control it with the order of `plugins:`, as above (see [Plugins](../04-plugins.md#order-of-independent-plugins)).
+
 ### More Plugin Examples
 
-**Rate Limiting Plugin:**
+**Rate limiting plugin:**
 
 ```elixir
-defmodule RateLimitPlugin do
-  use Malla.Plugin,
-    plugin_deps: [AuthPlugin]  # Runs after AuthPlugin
-  use Malla.Tracer
+defmodule MyApp.RateLimitPlugin do
+  use Malla.Plugin, plugin_deps: [Malla.Plugins.Request]
 
-  defcb malla_request(fun, args, opts) do
+  defcb malla_request(fun, _args, opts) do
     user_id = Keyword.get(opts, :user_id)
 
     if rate_limit_exceeded?(user_id, fun) do
-      warning("Rate limit exceeded", user_id: user_id, operation: fun)
-      {:error, {:rate_limited, retry_after: get_retry_after(user_id)}}
+      {:error, Malla.Status.public({:rate_limited, retry_after: 60})}
     else
-      record_request(user_id, fun)
       :cont
     end
   end
 
-  defp rate_limit_exceeded?(user_id, operation), do: false
-  defp record_request(user_id, operation), do: :ok
-  defp get_retry_after(user_id), do: 60
+  defp rate_limit_exceeded?(_user_id, _fun), do: false
 end
 ```
 
-**Validation Plugin:**
+For `Malla.Status.public/1` to produce a nice status for `{:rate_limited, ...}`, the called service (where this plugin runs) needs a `status/1` clause for it (see "Errors").
+
+**Validation plugin:**
 
 ```elixir
-defmodule ValidationPlugin do
+defmodule MyApp.ValidationPlugin do
   use Malla.Plugin, plugin_deps: [Malla.Plugins.Request]
 
-  defcb malla_request(fun, args, opts) do
-    case validate_args(fun, args) do
-      :ok -> :cont
-      {:error, reason} -> {:error, {:validation_failed, reason}}
-    end
-  end
-
-  defp validate_args(:create_user, [params]) do
+  defcb malla_request(:create_user, [params], _opts) do
     cond do
-      not is_map(params) -> {:error, "params must be a map"}
-      not Map.has_key?(params, :email) -> {:error, "email is required"}
-      true -> :ok
+      not is_map(params) -> {:error, Malla.Status.public({:parameter_invalid, :params})}
+      not Map.has_key?(params, :email) -> {:error, Malla.Status.public({:parameter_missing, :email})}
+      true -> :cont
     end
   end
 
-  defp validate_args(_fun, _args), do: :ok
+  defcb malla_request(_fun, _args, _opts), do: :cont
 end
 ```
+
+`{:parameter_invalid, ...}` and `{:parameter_missing, ...}` are built into `Malla.Plugins.Status` (code 400).
+
+Always finish interceptors with a catch-all clause that returns `:cont`; without it a request for another function raises `FunctionClauseError` in the called service and reaches the caller as an `internal_error`.
 
 See the [Callbacks guide](../05-callbacks.md) for more on how plugin chains work.
 
-## Error Handling
+## Errors
 
-The request protocol normalizes all errors through `Malla.Status`:
+Errors are normalized through `Malla.Status` (see [Status Handling](../09-observability/02-status-handling.md)):
 
 ```elixir
-defmodule OrderService do
+defmodule MyApp.OrderService do
+  use Malla.Service, plugins: [Malla.Plugins.Request]
   use Malla.Request
   use Malla.Tracer
 
-  def process_order(order_id) do
-    case req PaymentService.charge_order(order_id) do
+  defcb process_order(order_id) do
+    case req MyApp.PaymentService.charge_order(order_id) do
       {:ok, payment} ->
-        complete_order(order_id, payment)
+        {:ok, payment}
 
       {:error, %Malla.Status{status: "service_not_available"}} ->
-        # Service is down - could retry or queue for later
-        error("Payment service unavailable")
+        # The service is not running anywhere (after the retries)
         {:error, :payment_service_down}
 
       {:error, %Malla.Status{status: "insufficient_funds"} = status} ->
-        # Application-specific error
-        warning("Insufficient funds", order_id: order_id, status: status)
+        # An error that the payment service defined
+        warning("Insufficient funds", order_id: order_id, status: inspect(status))
         {:error, :payment_failed}
 
       {:error, %Malla.Status{} = status} ->
-        # Unexpected error
-        error("Payment processing error", status: status)
+        error("Payment processing error", status: inspect(status))
         {:error, :payment_error}
     end
   end
 end
 ```
 
-### Common Error Statuses
+### Where the statuses come from
 
-- `"service_not_available"` - Target service not running
-- `"internal_error"` - Unexpected exception occurred (on the remote node too: the exception
-  text is logged under a reference, never sent back; see `c:Malla.Plugins.Status.status_public/1`)
-- `"timeout"` - Request timed out
-- `"not_found"` - Resource not found
-- `"validation_failed"` - Input validation failed
-- `"unauthorized"` - Authentication failed
-- `"forbidden"` - Authorization failed
+- A handler that returns `{:error, term}` is normalized **on the called service** by `Malla.Status.public/1`: the `status/1` callback chain of that service is asked first. If a clause matches, the status is built from it; if none does, `status_public/1` answers: it logs the whole term with a reference and answers `"internal_error"` with `info: "Internal reference 1234"`. So the caller never sees the internals of an error that nobody described.
+- The transport errors reach the caller as bare reasons and are normalized **on the caller**: `:malla_service_not_available` becomes `"service_not_available"` (`code: 500`). An exception raised in the called function, a timeout, a lost connection, or a called service without `Malla.Plugins.Request` arrive as `{:malla_rpc_error, ...}`; it has no built-in clause on purpose (its text may carry internals), so it becomes `"internal_error"` with a logged reference.
+- Whatever the handler returns that is not in the response table is an `"internal_error"` too.
 
-See the [Status Handling guide](../09-observability/02-status-handling.md) for more details.
+### Common statuses
+
+- `"service_not_available"` - the service is not running on any node (or the target is paused).
+- `"internal_error"` - an exception or timeout in the call, an invalid handler response, or **any error with no `status/1` clause**. The details are in the log of the node that produced it, under the reference in `info`.
+- The ones built into `Malla.Plugins.Status` when your handler returns them: `"not_found"` (`:not_found`), `"unauthorized"`, `"forbidden"`, `"conflict"`, `"timeout"` (`:timeout`, 408), and so on.
+
+An RPC timeout is **not** `"timeout"`: it is an `"internal_error"`. Statuses such as `"validation_failed"` or `"insufficient_funds"` do not exist unless your code defines them.
+
+### Defining your own errors
+
+Add `status/1` clauses to the service that produces the error (the called service) with `defcb`:
+
+```elixir
+defmodule MyApp.PaymentService do
+  use Malla.Service, global: true, plugins: [Malla.Plugins.Request]
+
+  def charge_order(_order_id), do: {:error, :insufficient_funds}
+
+  defcb status(:insufficient_funds),
+    do: [info: "Insufficient funds", code: 402]
+
+  # Always end with a catch-all that continues the chain
+  defcb status(_), do: :cont
+end
+```
+
+`:insufficient_funds` becomes `%Malla.Status{status: "insufficient_funds", info: "Insufficient funds", code: 402}`. Without the clause it would be an `"internal_error"` with a reference.
 
 ## Logging
 
-Both sides log each request at `info` level (`REQ for ...` and `REQ Incoming ...`).
-The arguments are logged through `Malla.Util.redact_args`: all of them are hidden
-when the function name says it handles a secret (`set_password`, `login`, ...), and
-otherwise the values of secret-looking keys (`password`, `token`, `secret`, `api_key`,
-...) and the password of any URL are replaced by `"[redacted]"`.
+Both sides log each request at `info` level (`REQ for ...` and `REQ Incoming ...`) through `Malla.Tracer`. The arguments are logged with secret-looking values replaced: when the name of the function says it handles a secret (`set_password`, `login`, ...) all of its arguments are hidden, and otherwise the values of keys that look secret (`password`, `token`, `secret`, `api_key`, ...) and the password of any URL are replaced by `"[redacted]"`.
 
 ## Telemetry
 
@@ -458,16 +414,17 @@ Emitted on the calling side when a request completes.
 - `:duration` - Request duration in microseconds
 
 **Metadata**:
-- `:target` - Target service name
+- `:target` - Target service name (a string)
 - `:op` - Operation/function name
-- `:result` - Result type (`:ok`, `:created`, `:error`, `:status`)
+- `:result` - The tag of the answer (`:ok`, `:created`, `:error`, `:status`)
+- plus `:service`, `:node`, `:host` and `:cluster`, the metadata of the calling service
 
 ### `[:malla, :request, :in]`
 
-Emitted on the receiving side when request completes.
+Emitted on the called side when a request completes.
 
 **Measurements**: Same as `:out`
-**Metadata**: Same as `:out` (without `:target`)
+**Metadata**: `:op`, `:result` and the standard fields of the called service (no `:target`). Not emitted for requests that an interceptor answered, or that were rejected because the service was not running.
 
 ### Example Handler
 
@@ -477,16 +434,13 @@ Emitted on the receiving side when request completes.
   [:malla, :request, :out],
   fn _event, measurements, metadata, _config ->
     %{duration: duration} = measurements
-    %{target: target, op: op, result: result} = metadata
-    
+    %{target: target, op: op} = metadata
+
     # Log slow requests
     if duration > 1_000_000 do
-      Logger.warning("Slow request: #{target}.#{op} took #{duration}μs")
+      require Logger
+      Logger.warning("Slow request: #{target}.#{op} took #{duration} microseconds")
     end
-    
-    # Update metrics
-    :prometheus.inc(:malla_requests_total, [target, op, result])
-    :prometheus.observe(:malla_request_duration, [target, op], duration)
   end,
   nil
 )
@@ -496,6 +450,6 @@ Emitted on the receiving side when request completes.
 
 - [Remote Calls](03-remote-calls.md) - Lower-level RPC mechanisms
 - [Status Handling](../09-observability/02-status-handling.md) - Error normalization and `Malla.Status` protocol
-- [Tracing](../09-observability/01-tracing.md) - Distributed tracing with `Malla.Plugins.Tracer` and span propagation
+- [Tracing](../09-observability/01-tracing.md) - The instrumentation API and tracer plugins
 - [Plugins](../04-plugins.md) - Plugin system overview
 - [Callbacks](../05-callbacks.md) - Callback chain mechanics

@@ -92,7 +92,9 @@ defmodule LogService do
     :ok
   end
 
-  defcb get_recent_logs(count \\ 5) do
+  # Callbacks are identified by name and arity; a default argument would register
+  # only the highest arity, so we take `count` explicitly.
+  defcb get_recent_logs(count) do
     case StorageService.get(:logs) do
       {:ok, logs} -> Enum.take(logs, count)
       {:error, :not_found} -> []

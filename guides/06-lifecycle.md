@@ -1,30 +1,30 @@
 # Service Lifecycle
 
-This guide covers the complete lifecycle of a Malla service, from startup and configuration to shutdown and error handling.
+This guide covers the lifecycle of a Malla service, from startup and configuration to shutdown and error handling.
 
 ## Lifecycle States
 
 A Malla service has two independent status dimensions: an **Admin Status** that is controlled by the user/operator, and a **Running Status** that reflects the current operational state of the service.
 
 ### Admin Status
-This status is set manually to control the desired state of the service.
-- `:active` - The service should be running and processing requests.
-- `:pause` - The service should be temporarily paused. It stops processing new requests, but its supervised children remain running.
-- `:inactive` - The service should not be running. Its children are stopped, and it will not process requests.
+This status is set with `Malla.Service.set_admin_status/3` (or `MyService.set_admin_status/2`) to control the desired state of the service.
+- `:active` - The service should be running.
+- `:pause` - The service is paused. Its plugins and their children stay as they are (a running service keeps its children running), but the service reports `:paused`: it is no longer offered to other nodes (calls through `Malla.remote/4` get `{:error, :malla_service_not_available}`), `Malla.Plugins.Request` answers new requests with `{:error, :malla_service_not_available}`, and `Malla.Service.is_ready?/1` is `false`. Callbacks called locally still run: Malla does not block them.
+- `:inactive` - The plugins are stopped (`plugin_stop/2` first, then their children) and the service reports `:stopped`. The service **process stays alive** with its ETS table, and can be started again with `:active`.
 
-You can change the admin status using `Malla.Service.set_admin_status/2`.
+A service declared with `paused: true` starts with admin status `:pause`: it goes straight to `:paused` and no plugin is started until you set `:active`.
 
 ### Running Status
-This status represents the actual state of the service process.
+This status represents the actual state of the service.
 - `:starting` - The service is performing its startup sequence.
-- `:running` - The service is fully active and processing requests.
+- `:running` - The plugins are started. Only a `:running` service is listed by `Malla.Node` as available for remote calls.
 - `:pausing` - The service is transitioning to the `:paused` state.
-- `:paused` - The service is paused and not processing new work.
-- `:stopping` - The service is performing its shutdown sequence.
-- `:stopped` - The service has stopped cleanly.
-- `:failed` - The service has encountered an error and terminated. It may be restarted by its supervisor.
+- `:paused` - The service is paused.
+- `:stopping` - The service is stopping its plugins because of admin status `:inactive`.
+- `:stopped` - The plugins have been stopped (by `:inactive`, or because the service process is terminating).
+- `:failed` - A plugin could not start, or the supervisor of a plugin's children went down. The service process stays alive and tries to start again (see "Failed services" below).
 
-You can monitor the running status using `Malla.Service.get_status/1`.
+You can read the running status with `Malla.Service.get_status/1` (or `MyService.get_status/0`); it returns `:unknown` if the service process is not running. More details (including the last error) come from `Malla.Service.get_service_info/2`.
 
 ## Lifecycle Sequence
 
@@ -32,41 +32,40 @@ You can monitor the running status using `Malla.Service.get_status/1`.
 
 ```mermaid
 flowchart TD
-    START([START])
-    INIT[Initialization<br/>Create ETS table]
-    CONFIG[Configuration Phase<br/>plugin_config/2 TOP → DOWN<br/>Service → Plugin1 → Plugin2 → Base]
-    STARTING[":starting<br/>🔔 service_status_changed/1"]
+    START([start_link])
+    INIT[Initialization<br/>ETS table created]
+    CONFIG[Configuration<br/>merge layers, service_config/1<br/>plugin_config/2 TOP → DOWN<br/>Service → Plugin1 → Plugin2 → Base]
+    STARTING[":starting<br/>no notification"]
     PLUGIN_START[Start Phase<br/>plugin_start/2 BOTTOM → UP<br/>Base → Plugin2 → Plugin1 → Service]
-    RUNNING[":running<br/>Service is active<br/>🔔 service_status_changed/1"]
-    RECONFIG_MERGE[Config Merge<br/>plugin_config_merge/3 TOP → DOWN]
-    RECONFIG_UPDATE[Config Update<br/>plugin_updated/3 BOTTOM → UP]
+    RUNNING[":running<br/>🔔 service_status_changed/1"]
+    RECONFIG[Reconfiguration<br/>plugin_config_merge/3 TOP → DOWN<br/>plugin_config/2 TOP → DOWN<br/>plugin_updated/3 BOTTOM → UP]
     PAUSING[":pausing<br/>🔔 service_status_changed/1"]
     PAUSE[":paused<br/>🔔 service_status_changed/1"]
     STOPPING[":stopping<br/>🔔 service_status_changed/1"]
-    STOP[Stop Phase<br/>plugin_stop/2 TOP → DOWN<br/>Service → Plugin1 → Plugin2 → Base]
-    CHILDREN[Children Stop<br/>Supervisor shuts down children]
-    ETS[ETS Destroyed<br/>Service storage cleaned up]
+    STOP[Stop Phase<br/>plugin_stop/2 TOP → DOWN<br/>then children stopped]
     STOPPED([":stopped<br/>🔔 service_status_changed/1"])
     FAILED[":failed<br/>🔔 service_status_changed/1"]
+    EXIT([process ends<br/>ETS table gone])
     
     START --> INIT
     INIT --> CONFIG
     CONFIG --> STARTING
     STARTING --> PLUGIN_START
     PLUGIN_START --> RUNNING
-    RUNNING --> RECONFIG_MERGE
-    RECONFIG_MERGE --> RECONFIG_UPDATE
-    RECONFIG_UPDATE --> RUNNING
-    RUNNING --> PAUSING
+    RUNNING --> RECONFIG
+    RECONFIG --> RUNNING
+    RUNNING -->|admin :pause| PAUSING
     PAUSING --> PAUSE
-    PAUSE --> RUNNING
-    RUNNING --> STOPPING
+    PAUSE -->|admin :active| STARTING
+    RUNNING -->|admin :inactive| STOPPING
     STOPPING --> STOP
-    STOP --> CHILDREN
-    CHILDREN --> ETS
-    ETS --> STOPPED
+    STOP --> STOPPED
+    STOPPED -->|admin :active| STARTING
+    RUNNING -->|stop/0 or supervisor shutdown| STOP
+    STOPPED -->|process terminating| EXIT
     PLUGIN_START -.->|error| FAILED
-    RUNNING -.->|child crash| FAILED
+    RUNNING -.->|plugin child supervisor down| FAILED
+    FAILED -.->|retry every 5 s, admin :active| PLUGIN_START
     
     style RUNNING fill:#90EE90
     style PAUSE fill:#FFD700
@@ -80,46 +79,52 @@ flowchart TD
 ### 1. Startup Sequence
 When [`MyService.start_link/1`](`c:Malla.Service.Interface.start_link/1`) is called (either directly or by a supervisor):
 
-1.  **Initialization**: An ETS table for service-specific storage is created.
-2.  **Configuration Phase** (Top-down): The `c:Malla.Plugin.plugin_config/2` callback is invoked for each plugin, starting from the service module and moving down the dependency chain. Each plugin can validate and modify the configuration for the plugins that depend on it.
-4.  **Start Phase** (Bottom-up): The `c:Malla.Plugin.plugin_start/2` callback is invoked for each plugin, starting from the lowest-level dependency (`Malla.Plugins.Base`) and moving up to the service module. Each plugin can return a list of child specs to be started under the service's dedicated supervisor.
-5.  **Running**: Once all plugins have started successfully, the service's running status is set to `:running`.
+1.  **Initialization**: An ETS table for service-specific storage is created and the service ID is set in the process dictionary of the service process. If the start options carry `plugins:`, the plugin chain is rebuilt first.
+2.  **Configuration Phase**: The configuration layers are merged (static, then `otp_app`, then the runtime options; each layer goes through `c:Malla.Plugin.plugin_config_merge/3`). Then the `service_config/1` callback (see [Callbacks](05-callbacks.md)) is called, and then `c:Malla.Plugin.plugin_config/2` is called for each plugin (top-down: the service module first, then the plugins above their dependencies, ending at `Malla.Plugins.Base`). Each plugin can validate and modify the configuration. An error here, or a configuration with a key that is only allowed in `use Malla.Service`, stops the service: `start_link/1` fails and the process does not start.
+3.  The process is now registered and `start_link/1` returns. The running status is `:starting`. This first status is **not** notified through `service_status_changed/1`.
+4.  **Start Phase** (Bottom-up): right after, still in the service process, `c:Malla.Plugin.plugin_start/2` is called for each plugin, starting from `Malla.Plugins.Base` and moving up to the service module. A plugin can return child specs; they are started under a supervisor of that plugin, which is linked to the service process.
+5.  **Running**: Once all plugins have started, the running status becomes `:running` and `service_status_changed(:running)` is called.
 
 ### 2. Reconfiguration
-You can update a service's configuration at runtime by calling [`Malla.Service.reconfigure(MyService, new_config)`](`Malla.Service.reconfigure/2`). This process involves two callbacks:
+You can update a service's configuration at runtime by calling [`Malla.Service.reconfigure(MyService, new_config)`](`Malla.Service.reconfigure/2`). This process involves these callbacks:
 
-1. **Configuration Merge Phase** (Top-down): The `c:Malla.Plugin.plugin_config_merge/3` callback is invoked for each plugin, starting from the service module and moving down the dependency chain. Each plugin can implement custom merge logic for its configuration keys. If not implemented, configurations are deep-merged automatically.
+1. **Configuration Merge Phase** (Top-down): `c:Malla.Plugin.plugin_config_merge/3` is called for each plugin, starting from the service module and moving down the dependency chain, and then the update is deep-merged on top of the result.
+2. **Configuration Phase** (Top-down): `c:Malla.Plugin.plugin_config/2` is called again for each plugin with the merged configuration. If the service has `otp_app`, its application environment is re-applied first, then your update on top of it.
+3. **Update Phase** (Bottom-up): `c:Malla.Plugin.plugin_updated/3` is called for each plugin, starting from the lowest-level dependency and moving up. Each plugin receives the old and new configuration and can optionally ask for **that plugin** to be restarted: its children supervisor is stopped and `plugin_start/2` runs again.
 
-2. **Update Phase** (Bottom-up): The `c:Malla.Plugin.plugin_updated/3` callback is invoked for each plugin, starting from the lowest-level dependency and moving up. Each plugin receives the old and new configuration and can optionally request a restart if the configuration change requires it.
-
-For a comprehensive guide to reconfiguration, including adding/removing plugins dynamically and handling dynamic vs. restart-required changes, see the [Reconfiguration guide](07a-reconfiguration.md).
+For a comprehensive guide to reconfiguration, including adding and removing plugins, see the [Reconfiguration guide](07a-reconfiguration.md).
 
 ### 3. Pause and Resume
-- [`Malla.Service.set_admin_status(MyService, :pause)`](`Malla.Service.set_admin_status/2`): The service's running status becomes `:paused`. It will stop accepting new work, but its supervised children continue to run.
-- [`Malla.Service.set_admin_status(MyService, :active)`](`Malla.Service.set_admin_status/2`): The service resumes normal operation.
+- [`Malla.Service.set_admin_status(MyService, :pause)`](`Malla.Service.set_admin_status/3`): The running status goes `:pausing`, then `:paused`. The plugins are not stopped. The service is no longer listed as available to other nodes.
+- [`Malla.Service.set_admin_status(MyService, :active)`](`Malla.Service.set_admin_status/3`): The running status goes `:starting` and then `:running`. Plugins that are already started are not started again; plugins that are not started yet (when the service began paused) are started.
 
-### 4. Shutdown Sequence
-When a service is stopped (either via [`MyService.stop/0`](`c:Malla.Service.Interface.stop/0`) or by its supervisor):
+### 4. Inactive
+[`Malla.Service.set_admin_status(MyService, :inactive)`](`Malla.Service.set_admin_status/3`): `:stopping`, then `plugin_stop/2` of each plugin from the service down to `Malla.Plugins.Base`, each followed by the stop of its children, then `:stopped`. The process stays alive. Use `:active` to start the plugins again.
 
-1.  **Stop Phase** (Top-down): The `c:Malla.Plugin.plugin_stop/2` callback is invoked for each plugin, from the service down to its dependencies. This allows plugins to perform cleanup, release resources, and close connections gracefully.
-2.  **Children Stopped**: The service's supervisor shuts down all the children that were started by the plugins.
-3.  **ETS Table Destroyed**: The service's dedicated ETS storage table is destroyed, and all data within it is lost.
-4.  **Final State**: The running status becomes `:stopped` and the process terminates.
+### 5. Shutdown Sequence
+When a service process is stopped (either via [`MyService.stop/0`](`c:Malla.Service.Interface.stop/0`) or by its supervisor):
+
+1.  **Stop Phase** (Top-down): `c:Malla.Plugin.plugin_stop/2` is called for each plugin, from the service down to `Malla.Plugins.Base`. After each one, the supervisor of that plugin's children is stopped. This allows plugins to perform cleanup, release resources, and close connections.
+2.  **Final State**: The running status becomes `:stopped` and `service_status_changed(:stopped)` is called. This path goes straight from `:running` to `:stopped`; `:stopping` is only used by admin status `:inactive`.
+3.  **ETS Table Destroyed**: The process ends and its ETS table, owned by it, disappears with all its data. This happens after the `:stopped` notification, so the table can still be read from `service_status_changed(:stopped)`.
 
 ## Status Change Notifications
 
-Every time the service's running status changes (`:starting`, `:running`, `:paused`, `:stopped`, `:failed`), the `c:Malla.Plugins.Base.service_status_changed/1` callback is invoked on all plugins in the callback chain. This allows plugins to react to status changes, such as:
+Every time the running status changes, the `c:Malla.Plugins.Base.service_status_changed/1` callback is invoked through the callback chain of the service. This allows plugins to react to status changes, such as:
 
 - Opening or closing connections when transitioning to/from `:running`
 - Logging status changes for monitoring
 - Triggering health check updates
 - Coordinating with external systems
 
+It is called with `:running`, `:pausing`, `:paused`, `:stopping`, `:stopped`, `:failed`, and with `:starting` when a service becomes active again from `:paused` or `:stopped`; it is not called for the very first `:starting`. While a service stays in a failing start loop, `:failed` is notified again on every failed attempt. The callback runs inside the service process, so it must not block.
+
 Example implementation in a plugin:
 
 ```elixir
 defmodule MyPlugin do
   use Malla.Plugin
+  require Logger
   
   defcb service_status_changed(status) do
     case status do
@@ -141,15 +146,18 @@ defmodule MyPlugin do
 end
 ```
 
-**Important**: Always return `:cont` from `c:Malla.Plugins.Base.service_status_changed/1` so that the callback chain continues and all plugins receive the notification.
+**Important**: Always return `:cont` from `c:Malla.Plugins.Base.service_status_changed/1` so that the callback chain continues and all plugins receive the notification. The service expects the chain to end with `:ok`, which `Malla.Plugins.Base` returns; a final value that is not `:ok` makes the service process crash.
 
 ## Readiness and Health Checks
 
 Malla provides a readiness mechanism to determine if a service is fully operational and ready to accept work. This is particularly useful for:
 - Kubernetes readiness probes
 - Load balancer health checks
-- Service mesh integration
 - Coordinated service deployment
+
+### Liveness
+
+`Malla.Service.is_live?/1` is `true` while the status is `:starting`, `:running`, `:pausing`, `:paused`, `:stopping` or `:stopped`, and `false` if the status is `:failed` or `:unknown` (the service process is not running). It is meant for liveness probes: a service that stays `:failed` is reported as not live so that the platform can restart the node.
 
 ### Readiness Check
 
@@ -166,34 +174,35 @@ defmodule DatabasePlugin do
   use Malla.Plugin
   
   defcb service_is_ready?() do
-    # Check if database connection pool is established
-    case Malla.Service.get(__MODULE__, :db_pool_ready) do
-      true -> :cont  # This plugin is ready, check next plugin
-      false -> false  # Not ready, stop the chain and return false
+    srv_id = Malla.get_service_id!()
+
+    # Check if the database connection pool is established
+    case Malla.Service.get(srv_id, :db_pool_ready) do
+      true -> :cont   # This plugin is ready, check next plugin
+      _ -> false      # Not ready, stop the chain and return false
     end
   end
 end
 ```
 
-**Important**: Plugins should return `:cont` when ready to allow the chain to continue, or `false` to indicate they are not ready. Never return `true` directly from `service_is_ready?/0`.
+**Important**: Plugins should return `:cont` when ready to allow the chain to continue, or `false` to indicate they are not ready. Do not return `true` directly from `service_is_ready?/0`: it would end the chain and the plugins below would not be asked. (`Malla.Plugins.Base` is the end of the chain and returns `true`.)
 
 ## Graceful Shutdown and Drain
 
-Malla provides a drain mechanism for graceful shutdowns, allowing services to complete in-flight work before terminating. This is essential for:
-- Zero-downtime deployments
+Malla provides a drain mechanism for graceful shutdowns, allowing services to complete in-flight work before the node is stopped. This is essential for:
+- Rolling deployments
 - Kubernetes pod termination
 - Coordinated cluster updates
-- Preventing data loss during shutdown
 
 ### Drain Process
 
-Call `Malla.Service.drain/1` to initiate a graceful shutdown. This function:
+Call `Malla.Service.drain/1` to ask the service to drain. This function:
 1. Invokes the `c:Malla.Plugins.Base.service_drain/0` callback chain across all plugins.
 2. Each plugin should clean up its state and stop accepting new work.
 3. Returns `true` if all plugins return `:cont` (all plugins are fully drained).
 4. Returns `false` if any plugin returns `false` (drain not complete, needs retry).
 
-The drain mechanism is typically used in two phases:
+`drain/1` does not change the status of the service and does not stop it; it only asks the plugins. The drain mechanism is typically used in two phases:
 
 1. **Mark service as draining**: Stop accepting new work, but continue processing existing requests
 2. **Poll until drained**: Repeatedly call `drain/1` until it returns `true`, then stop the service
@@ -203,6 +212,7 @@ Example implementation in a plugin:
 ```elixir
 defmodule WebServerPlugin do
   use Malla.Plugin
+  require Logger
   
   defcb service_drain() do
     srv_id = Malla.get_service_id!()
@@ -230,31 +240,41 @@ end
 Here's a typical graceful shutdown workflow using the drain mechanism:
 
 ```elixir
-# 1. Mark service as paused (stops accepting new work)
-Malla.Service.set_admin_status(MyService, :pause)
+defmodule Shutdown do
+  require Logger
 
-# 2. Poll until all in-flight work completes
-defp wait_for_drain(service, retries \\ 30) do
-  case Malla.Service.drain(service) do
-    true ->
-      Logger.info("Service fully drained")
-      :ok
-    
-    false when retries > 0 ->
-      Logger.info("Waiting for drain, #{retries} retries left")
-      Process.sleep(1000)
-      wait_for_drain(service, retries - 1)
-    
-    false ->
-      Logger.warning("Drain timeout, forcing shutdown")
-      {:error, :drain_timeout}
+  def graceful_stop(service, retries \\ 30) do
+    # 1. Mark the service as paused (it is no longer offered to other nodes)
+    Malla.Service.set_admin_status(service, :pause)
+
+    # 2. Poll until all in-flight work completes
+    case wait_for_drain(service, retries) do
+      :ok ->
+        # 3. Stop the service
+        Malla.Service.stop(service)
+
+      error ->
+        error
+    end
+  end
+
+  defp wait_for_drain(service, retries) do
+    case Malla.Service.drain(service) do
+      true ->
+        Logger.info("Service fully drained")
+        :ok
+
+      false when retries > 0 ->
+        Logger.info("Waiting for drain, #{retries} retries left")
+        Process.sleep(1000)
+        wait_for_drain(service, retries - 1)
+
+      false ->
+        Logger.warning("Drain timeout")
+        {:error, :drain_timeout}
+    end
   end
 end
-
-wait_for_drain(MyService)
-
-# 3. Stop the service
-Malla.Service.stop(MyService)
 ```
 
 **Important**: Plugins should return `:cont` when fully drained to allow the chain to continue, or `false` if they still have work to complete. The drain can be called multiple times until all plugins report completion.
@@ -281,9 +301,20 @@ end
 
 ## Error Handling
 
-If a service's supervised child crashes and the supervisor's restart strategy is exhausted, the service itself will crash.
-1.  **Status Update**: The running status becomes `:failed`, triggering `c:Malla.Plugin.Base.service_status_changed/1` callbacks.
-2.  **Supervisor Restart**: The service's own supervisor will then attempt to restart it according to its configured strategy. This will trigger the full startup sequence again.
+### Failed services
+
+A service goes to `:failed` in two cases:
+
+- **A plugin cannot start**: `plugin_start/2` returns `{:error, reason}`, or the supervisor for the children it asked for cannot start. (An exception raised inside `plugin_start/2` is not caught: it crashes the service process, see below.) The service logs it and stops the plugins that **did** start, calling their `plugin_stop/2` from the top (the plugin that failed, and the ones that were still to start, are not stopped), then sets `:failed` (`last_error` holds the reason).
+- **A plugin's children go down**: the supervisor that `plugin_start/2` asked for stops (for example because its children exceeded `max_restarts`). The service sets `:failed` with `{:child_failed, plugin}`.
+
+In both cases the service **process stays alive**. Every 5 seconds it checks its state, and while the admin status is `:active` a `:failed` service tries to start the plugins that are not running (all of them after a failed start, only the one that went down in the second case). When that works, the status is `:running` again. With admin status `:pause` or `:inactive` a failed service is not retried.
+
+A service that stays `:failed` is reported by `Malla.Service.is_live?/1` as not live; that is what a liveness probe should use to get the node restarted.
+
+### Crashes of the service process
+
+If the service process itself crashes (an exception in a callback it runs, for instance in `service_status_changed/1`), its terminate hook stops the plugins and the process ends. A supervisor that started it with `child_spec/1` (`restart: :transient`) restarts it, and the whole startup sequence runs again; the ETS table starts empty.
 
 ## Compile-Time Code Injection
 
@@ -320,7 +351,7 @@ defmodule MyApp.MetricsPlugin do
 end
 ```
 
-After compilation, `MyService.metric_prefix/0` is a regular function defined on the service module — and, like any other service function, it is reachable from remote nodes through Malla's virtual module mechanism.
+After compilation, `MyService.metric_prefix/0` is a regular function defined on the service module. It is a plain `def`, not a callback, so it is **not** part of the virtual module that other nodes generate for the service (virtual modules only contain callbacks); another node can reach it with `Malla.remote(MyService, :metric_prefix, [])`.
 
 `plugin_module/1` is invoked in plugin chain order (top-level plugins first, `Malla.Plugins.Base` last), after the callback dispatch logic has been generated, so the `t:Malla.Service.t/0` it receives has its `callbacks` map fully populated.
 
@@ -334,11 +365,11 @@ These are standard Elixir behaviours defined in `Malla.Plugin`:
 
 | Callback | Order | Trigger | Purpose |
 | :--- | :--- | :--- | :--- |
-| `c:Malla.Plugin.plugin_config/2` | Top → Bottom | Startup, Reconfiguration | Validate and modify configuration. |
-| `c:Malla.Plugin.plugin_config_merge/3` | Top → Bottom | Startup (with runtime config), Reconfiguration | Custom merge logic for configuration updates. |
-| `c:Malla.Plugin.plugin_start/2` | Bottom → Top | Startup | Return child specs to be supervised. |
-| `c:Malla.Plugin.plugin_updated/3` | Bottom → Top | Reconfiguration | Handle dynamic configuration changes, optionally request restart. |
-| `c:Malla.Plugin.plugin_stop/2` | Top → Bottom | Shutdown | Clean up resources before termination. |
+| `c:Malla.Plugin.plugin_config/2` | Top → Bottom | Startup, every reconfiguration (and `add_plugin/3` with `config:`) | Validate and modify configuration. |
+| `c:Malla.Plugin.plugin_config_merge/3` | Top → Bottom | Startup (each layer), every reconfiguration | Custom merge logic for configuration updates. |
+| `c:Malla.Plugin.plugin_start/2` | Bottom → Top | Startup, resume from `:pause`/`:inactive`, retry after `:failed`, plugin added at runtime, plugin restart | Return child specs to be supervised. |
+| `c:Malla.Plugin.plugin_updated/3` | Bottom → Top | Reconfiguration | Handle dynamic configuration changes, optionally request a restart of the plugin. |
+| `c:Malla.Plugin.plugin_stop/2` | Top → Bottom | `:inactive`, shutdown, failed start (plugins that started), plugin removed | Clean up resources before the plugin's children are stopped. |
 | `c:Malla.Plugin.plugin_module/1` | Top → Bottom | Service compilation | Inject code (functions, attributes, submodules) into the service module. |
 
 ### Malla Callbacks (defcb)
@@ -347,7 +378,7 @@ These callbacks are defined with `defcb` and participate in the callback chain:
 
 | Callback | Chain Order | Trigger | Purpose |
 | :--- | :--- | :--- | :--- |
-| `c:Malla.Plugins.Base.service_status_changed/1` | Top → Bottom | Status changes | React to running status changes (`:starting`, `:running`, `:paused`, `:stopped`, `:failed`). Always return `:cont`. |
+| `c:Malla.Plugins.Base.service_status_changed/1` | Top → Bottom | Status changes | React to running status changes. Always return `:cont`. |
 | `c:Malla.Plugins.Base.service_is_ready?/0` | Top → Bottom | `Malla.Service.is_ready?/1` | Check if service is ready to accept work. Return `:cont` if ready, `false` if not. Used for health checks. |
 | `c:Malla.Plugins.Base.service_drain/0` | Top → Bottom | `Malla.Service.drain/1` | Prepare for graceful shutdown. Return `:cont` when fully drained, `false` if still has work. Can be retried. |
 

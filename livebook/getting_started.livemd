@@ -1,7 +1,8 @@
 # Getting Started with Malla
 
 ```elixir
-Mix.install([:malla])
+# Check hex.pm/packages/malla for the latest version
+Mix.install([{:malla, "~> 0.1"}])
 ```
 
 ## Introduction
@@ -23,7 +24,7 @@ First, let's create a simple calculator service that can add numbers.
 defmodule Calculator do
   use Malla.Service
 
-  # Public API - can be called remotely
+  # A plain function - other nodes can call it with Malla.remote/4
   def add(a, b) do
     a + b
   end
@@ -109,14 +110,20 @@ IO.puts("8 × 4 = #{product}")
 
 ### How the Callback Chain Works
 
-When you call `CalculatorV3.calculate(:add, 8, 4)`, here's what happens:
+Only the modules that define `calculate/3` are in its chain, in the order of the plugin chain. `CalculatorV3` does not define it, so it is not asked. Plugins that do not depend on each other are called in the order of the `plugins:` list, so `AdditionPlugin` comes first. You can see the chain:
 
-1. **CalculatorV3** checks first (top of chain) - returns `:cont`
-2. **MultiplicationPlugin** checks - operation is `:add`, returns `:cont`
-3. **AdditionPlugin** checks - operation is `:add`, returns `{:ok, 12}` ✓
-4. **Chain stops** - the result is returned
+```elixir
+Malla.Service.get_callbacks(CalculatorV3, :calculate)
+# [{{:calculate, 3}, [{AdditionPlugin, :calculate}, {MultiplicationPlugin, :calculate}]}]
+```
 
-The chain walks from top to bottom until a plugin returns something other than `:cont`.
+When you call `CalculatorV3.calculate(:multiply, 8, 4)`, here's what happens:
+
+1. **AdditionPlugin** checks first - the operation is `:multiply`, so it returns `:cont`
+2. **MultiplicationPlugin** checks - it handles `:multiply` and returns `{:ok, 32}` ✓
+3. **Chain stops** - the result is returned to the caller
+
+The chain walks from top to bottom until a plugin returns something other than `:cont`. If the last module of a chain also returned `:cont`, that raw `:cont` would be the result.
 
 ## Part 4: Plugin Dependencies and Chain Ordering
 
@@ -161,14 +168,14 @@ IO.puts("= #{product}")
 
 ### Chain Order with Dependencies
 
-The chain for `CalculatorV4.calculate(:multiply, 6, 7)`:
+The plugin chain of `CalculatorV4` is `CalculatorV4 → LoggingPlugin → AdditionPlugin → MultiplicationPlugin → Malla.Plugins.Base` (the dependencies of a plugin are placed in the order of its `plugin_deps`). `CalculatorV4` itself does not define `calculate/3`, so it is skipped. For `CalculatorV4.calculate(:multiply, 6, 7)`:
 
-1. **CalculatorV4** (top) - no `defcb calculate`, returns `:cont`
-2. **LoggingPlugin** - prints `>> calculate(multiply, 6, 7)`, returns `:cont`
+1. **LoggingPlugin** - prints `>> calculate(multiply, 6, 7)`, returns `:cont`
+2. **AdditionPlugin** - the operation is not `:add`, returns `:cont`
 3. **MultiplicationPlugin** - handles `:multiply`, returns `{:ok, 42}`
 4. **Chain stops** - the result is returned
 
-By declaring `plugin_deps`, we told Malla that LoggingPlugin sits above the math plugins. No need to manually order the `plugins:` list.
+By declaring `plugin_deps`, we told Malla that LoggingPlugin sits above the math plugins. No need to manually order the `plugins:` list. You can print the order with `CalculatorV4.service().plugin_chain`.
 
 ## Part 5: Extending Behavior Without Modifying Existing Plugins
 
@@ -207,7 +214,7 @@ Notice that we didn't modify `AdditionPlugin`, `MultiplicationPlugin`, or `Loggi
 
 ## Part 6: Adding and Removing Plugins at Runtime
 
-Malla can add or remove plugins from a running service without stopping it. The service restarts automatically with the updated plugin chain. This is useful for debugging in production, feature rollouts, or disabling problematic plugins.
+Malla can add or remove plugins from a running service without stopping it. The service is not restarted: its callback chain is rebuilt with the new plugin list. This is useful for debugging in production, feature rollouts, or disabling problematic plugins.
 
 Let's start a calculator with `FloatPlugin` and then remove it at runtime.
 
@@ -240,7 +247,7 @@ IO.inspect(CalculatorV6.calculate(:add, 6, 7))
 # => {:ok, 13.0}
 ```
 
-**No code changes, no recompilation, no downtime**. The callback chain is rebuilt and the service restarts with the new plugin configuration automatically.
+**No code changes and no restart of the service.** `del_plugin/2` and `add_plugin/3` rebuild the callback chain (the dispatch module of the service is recompiled, which takes a moment), and the plugin is started or stopped inside the running service. Note that `LoggingPlugin` was part of the chain only because `FloatPlugin` depends on it: it left with it, and came back with it.
 
 ## Part 7: Runtime Configuration and Reconfiguration
 
@@ -248,22 +255,12 @@ Malla services can be configured through `use Malla.Service` and reconfigured at
 
 Plugins can read service configuration inside callbacks using `Malla.get_service_id!/0` and `srv_id.get_config/0`.
 
+The update that `reconfigure/2` receives is **deep-merged** into the current configuration by default: nested keyword lists are merged key by key, so you only pass the keys that change. (Values that are not keyword lists, such as maps, are replaced instead of merged, so use keyword lists for what you want to update partially.) A plugin only needs to implement `plugin_config_merge/3` to validate or reject an update, which is not needed here.
+
 ```elixir
 defmodule RoundingPlugin do
   use Malla.Plugin,
     plugin_deps: [AdditionPlugin, MultiplicationPlugin]
-
-  # Handle merging our config key when reconfigure/2 is called.
-  # Without this, updates are ignored (the default returns :ok = "skip").
-  @impl true
-  def plugin_config_merge(_srv_id, config, update) do
-    case update[:rounding_plugin] do
-      nil -> :ok
-      my_update ->
-        my_config = config |> Keyword.get(:rounding_plugin, %{}) |> Map.merge(my_update)
-        {:ok, Keyword.put(config, :rounding_plugin, my_config)}
-    end
-  end
 
   defcb calculate(operation, a, b) do
     srv_id = Malla.get_service_id!()
@@ -278,24 +275,25 @@ end
 defmodule CalculatorV7 do
   use Malla.Service,
     plugins: [RoundingPlugin],
-    # Default config: round to 2 decimal places (use a map)
-    rounding_plugin: %{decimals: 2}
+    # Default config: round to 1 decimal place (a keyword list)
+    rounding_plugin: [decimals: 1]
 end
 
 {:ok, _pid} = CalculatorV7.start_link([])
 
-IO.puts("--- Rounding to 2 decimals (default) ---")
-IO.inspect(CalculatorV7.calculate(:add, 1.005, 2.006))
+IO.puts("--- Rounding to 1 decimal (default) ---")
+IO.inspect(CalculatorV7.calculate(:add, 1.5, 2.25))
+# => {:ok, 3.8}
 
-# Change rounding precision at runtime (use a map)
-IO.puts("\n--- Reconfiguring to 4 decimals ---")
-Malla.Service.reconfigure(CalculatorV7, rounding_plugin: %{decimals: 4})
-Process.sleep(100)
+# Change rounding precision at runtime
+IO.puts("\n--- Reconfiguring to 2 decimals ---")
+:ok = Malla.Service.reconfigure(CalculatorV7, rounding_plugin: [decimals: 2])
 
-IO.inspect(CalculatorV7.calculate(:add, 1.005, 2.006))
+IO.inspect(CalculatorV7.calculate(:add, 1.5, 2.25))
+# => {:ok, 3.75}
 
 # You can also pass config at startup via start_link
-# CalculatorV7.start_link(rounding_plugin: %{decimals: 0})
+# CalculatorV7.start_link(rounding_plugin: [decimals: 0])
 ```
 
 ## Key Takeaways
@@ -306,8 +304,9 @@ IO.inspect(CalculatorV7.calculate(:add, 1.005, 2.006))
 4. **Plugin dependencies control chain order** - dependent plugins run before their dependencies
 5. **Return `:cont`** to continue the chain, or any other value to stop and return
 6. **Configuration** - any non-reserved key in `use Malla.Service` becomes config, readable with `get_config/0` and changeable with `reconfigure/2`
-7. **Plugins can be added/removed at runtime** with `add_plugin/2` and `del_plugin/2`
+7. **Plugins can be added/removed at runtime** with `add_plugin/3` and `del_plugin/2`, without restarting the service
+8. **The last module of a chain** decides what the caller gets when everybody returns `:cont`: it returns the raw `:cont`, so end your chains with a plugin that answers
 
 ## Next Steps
 
-This tutorial only scratches the surface of what Malla offers. Check out the [guides](introduction.html) and API documentation for the full picture: service lifecycle, distributed service discovery, remote calls, request handling, tracing, and more.
+This tutorial only scratches the surface of what Malla offers. Check out the [guides](../guides/01-introduction.md) and API documentation for the full picture: service lifecycle, distributed service discovery, remote calls, request handling, tracing, and more.

@@ -90,7 +90,7 @@ IO.puts("Logs via virtual module:")
 Enum.each(logs, &IO.puts/1)
 ```
 
-See documentation about downsides of using this "virtual" call.
+Virtual modules only have the **callbacks** (`defcb`) of the service: that is why `LogService` defines its functions with `defcb`. A plain `def` of the service, like `StorageService.put/2`, is not part of the virtual module: call it with `call` or `Malla.remote/4`. A virtual call also cannot take options such as `:timeout`. See the [Remote Calls guide](../guides/08-distribution/03-remote-calls.md) for these limits.
 
 ## Summary
 
@@ -102,8 +102,8 @@ Congratulations! You've successfully:
 1. Set up a distributed Erlang cluster with two nodes
 2. Created a service on one node (StorageService)
 3. Made remote calls from another node
-4. Experienced automatic service discovery
-5. Built bidirectional service communication
+4. Saw a service started later (LogService) found by the other node
+5. Called a service through a virtual module
 
 Key Concepts:
 
@@ -111,20 +111,24 @@ Key Concepts:
   Makes services discoverable across the cluster via :pg process groups
 
 - Malla.call / Malla.remote
-  Transparently route function calls to the node running the service
+  Route function calls to a node that runs the service
 
 - Service Discovery
-  Malla.Node automatically finds services every 10 seconds
-  Local node is preferred, remote nodes are randomized for load balancing
+  Malla.Node learns of a service when it changes status, and re-checks
+  every 10 seconds. The local node, if it runs the service, comes first;
+  the remote nodes are in a random order that is reshuffled at each check.
 
 - Virtual Modules
-  When a remote service is detected, Malla creates a local proxy module
+  When a remote service is detected and this node has no module of that
+  name, Malla creates a local proxy module with the service's callbacks
 
 - Failover
-  If a node fails, calls automatically route to other available nodes
+  A call goes to the next node only when a node answers that the
+  service is not available. Exceptions and timeouts are returned to the caller.
 
-Next steps: try starting a third node, stopping the storage node
-to see failover, or using Malla.Node.call_cb_all/3 to broadcast.
+Next steps: start a third node that also runs StorageService, then look at
+Malla.Node.get_nodes(StorageService), or use Malla.Node.call_cb_all/4 to
+call every node of a service.
 """)
 ```
 

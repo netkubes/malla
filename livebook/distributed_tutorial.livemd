@@ -2,14 +2,16 @@
 
 ## Introduction
 
-One of Malla's most powerful features is **transparent distributed computing**. Services can discover each other across nodes and make remote calls as easily as local ones.
+Services declared with `global: true` are announced to the other nodes of the cluster, and a node that knows where a service runs can call it with `Malla.remote/4`, or with the `call` macro.
 
 In this tutorial, you'll:
 
 1. Set up two Livebook sessions as separate nodes
-2. Create services that communicate across nodes
-3. See automatic service discovery in action
-4. Learn about failover and load balancing
+2. Create services on one node and call them from the other
+3. See service discovery in action: a service that starts later is found by the other node
+4. Call a service through a virtual module, a local proxy that Malla generates for it
+
+The tutorial does not show what happens when a node fails or when several nodes run the same service: see [Service Discovery](../guides/08-distribution/02-service-discovery.md) and [Remote Calls](../guides/08-distribution/03-remote-calls.md) for how nodes are chosen and when a call goes to the next node.
 
 ## Setup
 
@@ -36,9 +38,9 @@ Open each notebook in its own Livebook tab. For each tab, go to the **Runtime** 
 
 ### Step 3: Open the notebooks
 
-1. **[Storage Node](livebook/distributed_storage.livemd)** — start here, creates the StorageService
-2. **[Client Node](livebook/distributed_client.livemd)** — connects to the storage node and makes remote calls
+1. **[Storage Node](distributed_storage.livemd)** — start here, creates the StorageService
+2. **[Client Node](distributed_client.livemd)** — connects to the storage node and makes remote calls
 
 Run the Storage notebook first, then switch to the Client notebook.
 
-> This tutorial only scratches the surface of what Malla offers. Check out the [guides](introduction.html) and API documentation for the full picture: plugin lifecycle, configuration, reconfiguration, request handling, tracing, and more.
+> This tutorial only scratches the surface of what Malla offers. Check out the [guides](../guides/01-introduction.md) and API documentation for the full picture: plugin lifecycle, configuration, reconfiguration, request handling, tracing, and more.
