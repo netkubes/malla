@@ -95,24 +95,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   service then failed with `malla_cb_in` undefined. The module is now
   loaded with `Code.ensure_loaded?/1` before deciding.
 
-## [0.1.1] - 2023-10-05
-
-### Added
-- Initial release of Malla framework for distributed services in Elixir.
-- Support for plugins, callbacks, service discovery, and instrumentation.
-- Basic documentation and examples.
-
-### Changed
-- N/A
-
-### Deprecated
-- N/A
-
-### Removed
-- N/A
-
-### Fixed
-- N/A
-
-### Security
-- N/A
+[Unreleased]: https://github.com/netkubes/malla/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/netkubes/malla/releases/tag/v0.1.0
