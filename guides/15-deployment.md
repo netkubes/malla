@@ -153,7 +153,7 @@ During a rolling upgrade old and new versions of a service run at the same time,
 - `Malla.Node.get_nodes/1` has the local node first and shuffles the others; a call goes to the first node that answers. During the upgrade a caller therefore reaches old and new nodes.
 - Design the callbacks of a service so that the version before and the version after can both serve them: add new callbacks and new optional arguments before you remove old ones, and remove them in a later release. A `defcb` is identified by name and arity, so a new arity is a new callback.
 - You can read the versions: `Malla.Node.get_instances(MyService)` returns each node's information with its `:vsn`. A caller that must reach only some of them can pick the nodes itself and pass them in the `:nodes` option of `Malla.Node.call_cb/4`.
-- A node on an older Malla that answers `:service_not_available` (without the `malla_` prefix) is understood by newer nodes, so failover works while the cluster is upgraded node by node.
+- Nodes on Malla 0.0.1-rc.2 or earlier answer `:service_not_available` without the `malla_` prefix, which newer nodes do not read as "not available here": a call that reaches such a node does not fail over to the next one. Do not mix those versions with 0.1.0 or later in one cluster; upgrade them together.
 - New pods should not receive calls until they are ready: the service is offered to other nodes as soon as it is `:running`. If a service needs warming, start it paused (`use Malla.Service, paused: true`) and activate it with `set_admin_status(:active)` when ready.
 - Runtime-built chains (plugins added with `add_plugin/3`) are not part of the new release: they live only in the VM that built them.
 

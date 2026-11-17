@@ -47,6 +47,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Malla.Service.get_config/1` and `Malla.Service.get_status/1` each have their
   own doc (the status doc was on `get_config/1`).
 
+### Removed
+- `Malla.Node` no longer reads an unprefixed `{:error, :service_not_available}`
+  reply (from nodes on 0.0.1-rc.2 or earlier) as
+  `:malla_service_not_available`. A call that reaches such a node does not
+  fail over to the next one: upgrade those nodes together with the rest of
+  the cluster.
+
 ## [0.0.1-rc.3] - 2026-11-13
 
 ### Added

@@ -77,8 +77,6 @@ Malla.remote(
 
 The text of a remote exception is never put in a public `Malla.Status`: `Malla.Status.public/2` hands `{:malla_rpc_error, ...}` to `status_public/1`, which logs it under a reference and answers `"internal_error"` (see [Status Handling](../09-observability/02-status-handling.md)).
 
-During an upgrade, a node on an older Malla may answer `:service_not_available` (without the `malla_` prefix); `Malla.Node` reads it as `:malla_service_not_available`, so the call still fails over to the next node.
-
 ## Malla.call Macro
 
 For a more natural syntax, use the `Malla.call/2` macro. It makes remote calls look like regular function calls. You need `require Malla` (or `import Malla, only: [call: 1, call: 2]`) first.
