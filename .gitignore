@@ -11,3 +11,4 @@ priv/plts/
 run.sh
 .git-backup/
 INFORME_MEJORA.md
+.tool-versions-*
