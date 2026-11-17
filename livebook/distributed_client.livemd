@@ -2,19 +2,40 @@
 
 ## Step 1: Connect to the Storage Node
 
+Connecting is not enough to call the service: `Malla.Node` must first learn that `StorageService` runs on the other node. Discovery starts as soon as the nodes connect and takes a moment, so this cell waits for it (up to 10 seconds).
+
 ```elixir
 storage_node = :"storage@127.0.0.1"
+
+wait_for_service = fn service ->
+  Enum.find_value(1..50, fn _ ->
+    case Malla.Node.get_nodes(service) do
+      [] ->
+        Process.sleep(200)
+        nil
+
+      nodes ->
+        nodes
+    end
+  end)
+end
 
 case Node.connect(storage_node) do
   true ->
     IO.puts("Connected to #{storage_node}")
-    IO.puts("Connected nodes: #{inspect(Node.list())}")
+
+    case wait_for_service.(StorageService) do
+      nil -> IO.puts("StorageService not found: is it running in the Storage notebook?")
+      nodes -> IO.puts("StorageService found on #{inspect(nodes)}")
+    end
 
   false ->
     IO.puts("Failed to connect to #{storage_node}")
     IO.puts("Make sure the Storage node IEx session is running")
 end
 ```
+
+If you call a service before it is discovered, the call is not lost: `Malla.remote/4` logs a `service_not_available` warning, waits and retries (5 times, 1 second apart, by default).
 
 ## Step 2: Make Remote Calls
 
