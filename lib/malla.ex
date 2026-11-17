@@ -40,15 +40,13 @@ defmodule Malla do
 
   - `local/2` - Invoke local callback with service_id from process dictionary.
   - `local/3` - Invoke local callback.
-  - `remote/3` - Invoke remote callback.
-  - `remote/4` - Invoke remote callback with options.
+  - `remote/4` - Invoke a callback or function of a service on any node running it.
   - `call/1` - Macro for syntactic sugar to invoke remote callbacks.
   - `call/2` - Macro for syntactic sugar to invoke remote callbacks with options.
 
   ### Utilities
 
   - `metric/4` - Record metric with auto-injected metadata.
-  - `event/2` - Generate event with service context.
   - `authorize/3` - Authorization callback.
 
 
@@ -63,6 +61,14 @@ defmodule Malla do
   require Logger
 
   defmodule ServiceIdMissing do
+    @moduledoc """
+    Raised when a function needs the service ID and the calling process has none.
+
+    `Malla.get_service_id!/1` and the functions built on it raise it. A callback
+    called through the service sets the ID for its process; a plain function
+    called directly, or a process you spawn, does not. Set it with
+    `Malla.put_service_id/1` or pass `service_id:` where the function accepts it.
+    """
     defexception [:message]
 
     @impl true
@@ -359,13 +365,13 @@ defmodule Malla do
   @doc """
   Convenient macro to make remote calls more friendly.
 
-  It calls `remote/4` with the module, function name, and arguments extracted from the given expression.
+  It calls `remote/4` with the module, function name, and arguments extracted
+  from the given expression. Use `require Malla` first.
 
   ## Examples
 
-      call Module.fun(:a, :b), timeout: 5000
-      # Translates to: remote(Module, :fun, [:a, :b], timeout: 5000)
-
+      call Module.fun(:a, :b)
+      # Translates to: remote(Module, :fun, [:a, :b])
   """
   defmacro call({{:., _, [module, fun]}, _, args}) do
     quote do
@@ -374,14 +380,12 @@ defmodule Malla do
   end
 
   @doc """
-  Convenient macro to make remote calls more friendly.
-
-  It calls `remote/3` with the module, function name, and arguments extracted from the given expression.
+  Same as `call/1`, with options for `remote/4`.
 
   ## Examples
 
-      call Module.fun(:a, :b)
-      # Translates to: remote(Module, :fun, [:a, :b])
+      call Module.fun(:a, :b), timeout: 5000
+      # Translates to: remote(Module, :fun, [:a, :b], timeout: 5000)
   """
 
   defmacro call({{:., _, [module, fun]}, _, args}, opts) do
@@ -452,6 +456,4 @@ defmodule Malla do
     service_id = Malla.get_service_id!(opts)
     local(service_id, :malla_authorize, [resource, scope, opts])
   end
-
-  # defdelegate sreq(service, op, params \\ %{}, opts \\ []), to: Malla.Request
 end

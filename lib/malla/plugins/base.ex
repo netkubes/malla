@@ -32,7 +32,7 @@ defmodule Malla.Plugins.Base do
 
   @type id :: Malla.id()
   @type class :: Malla.class()
-  @type config :: map
+  @type config :: keyword
 
   @optional_callbacks [
     service_config: 1,
@@ -51,8 +51,17 @@ defmodule Malla.Plugins.Base do
   ## Service Server Callbacks
   ## ===================================================================
 
-  @doc false
-  @callback service_config(keyword()) :: {:ok, keyword()} | {:error, term}
+  @doc """
+  Called once when the service starts, with the merged configuration, before
+  any `c:Malla.Plugin.plugin_config/2`.
+
+  Return `{:ok, config}` with the configuration to use, `{:error, reason}` to
+  make the start fail, or `{:cont, [config]}` to pass a modified configuration
+  to the next module of the chain. The default returns `{:ok, config}`. It is
+  not called on reconfiguration; use `c:Malla.Plugin.plugin_config/2` for
+  validation that must also run then.
+  """
+  @callback service_config(config) :: {:ok, config} | {:error, term} | cont
   defcb service_config(config), do: {:ok, config}
 
   @doc """
@@ -65,7 +74,7 @@ defmodule Malla.Plugins.Base do
   `service_module.service()` to get the full service struct.
   """
 
-  @callback service_status_changed(Service.running_status()) :: :ok
+  @callback service_status_changed(Service.running_status()) :: :ok | cont
   defcb service_status_changed(_status), do: :ok
 
   @doc """
@@ -104,12 +113,6 @@ defmodule Malla.Plugins.Base do
   end
 
   @doc false
-  # @doc """
-  # Called when `Malla.event/2` is called.
-
-  # It does nothing by default, but it should always return the same event.
-  # """
-
   @callback malla_event(Malla.Event.t(), keyword) :: Malla.Event.t()
   defcb malla_event(event, _opts), do: event
 

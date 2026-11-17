@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-11-16
 
+### Added
+- `Malla.Service.get_all_local/0`, the public name of the list of services
+  running on the node (Malla.Service.Server is internal).
+- `Malla.Util` is documented: `validate_app!/2`, `keyword_merge/2`,
+  `map_merge/2`, `redact/1`, `redact_args/2` and `secret_name?/1`. Its other
+  functions are internal.
+- `c:Malla.Plugins.Base.service_config/1` is documented.
+
 ### Fixed
 - `Malla.Service.del_plugin/2` with a plugin the service does not have returns
   `:ok` instead of crashing the service.
@@ -48,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   own doc (the status doc was on `get_config/1`).
 
 ### Removed
+- Malla.Node.precompile_stubs/0 and the malla_cb_in/3 callback of
+  Malla.Service.Interface are no longer in the documentation: they are called by Malla itself.
 - `Malla.Node` no longer reads an unprefixed `{:error, :service_not_available}`
   reply (from nodes on 0.0.1-rc.2 or earlier) as
   `:malla_service_not_available`. A call that reaches such a node does not

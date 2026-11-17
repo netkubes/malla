@@ -526,8 +526,6 @@ defmodule Malla.Tracer do
   @spec get_base() :: any
   def get_base(), do: Malla.local(:malla_span_get_base, [])
 
-  # def set_base(base), do: Malla.local(:malla_span_set_base, [base])
-
   ## ===================================================================
   ## Internal
   ## ===================================================================
@@ -611,8 +609,4 @@ defmodule Malla.Tracer do
   def level_to_logger(@level_error), do: :error
   def level_to_logger(code) when is_integer(code) and code >= @level_error, do: :error
   def level_to_logger(name) when is_atom(name), do: name_to_level(name) |> level_to_logger()
-
-  # defp to_map(map) when is_map(map), do: map
-  # defp to_map(tuple) when is_tuple(tuple), do: Map.new([tuple])
-  # defp to_map(list) when is_list(list), do: Map.new(list)
 end

@@ -32,7 +32,6 @@ defmodule Malla.Application do
       # See functions in Malla.Registry
       {Registry, keys: :unique, name: Malla.ProcRegistry},
       {Registry, keys: :duplicate, name: Malla.ProcStore},
-      # Malla.Event,
       Malla.Config,
       # Create PG scope "Malla.Services"
       %{

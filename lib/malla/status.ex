@@ -179,13 +179,6 @@ defmodule Malla.Status do
     |> add_metadata(srv_id)
   end
 
-  # defp status_internal(srv_id, status) do
-  #   ref = rem(:erlang.phash2(:erlang.make_ref()), 10000)
-  #   msg = "#{inspect(ref)}: #{inspect(status)} (#{srv_id})"
-  #   Logger.warning("Malla reference " <> msg)
-  #   %Status{status: "unknown_error", info: "Internal reference " <> string(ref)}
-  # end
-
   defp call_cb(srv_id, user_status) do
     case Malla.local(srv_id, :status, [user_status]) do
       :continue ->
@@ -255,54 +248,11 @@ defmodule Malla.Status do
     rescue
       _ ->
         inspect(term)
-        # to_string(:io_lib.format(~c"~p", [term]))
     end
   end
-
-  # @doc """
-  # Safely formats a string using `:io_lib.format/2`.
-
-  # Returns an empty string if formatting fails and logs a warning.
-
-  # ## Examples
-
-  #     iex> Malla.Status.to_fmt(~c"Hello ~s", ["world"])
-  #     "Hello world"
-
-  #     iex> Malla.Status.to_fmt(~c"Number: ~p", [42])
-  #     "Number: 42"
-  # """
-  # @spec to_fmt(charlist, list) :: String.t()
-  # def to_fmt(fmt, list) do
-  #   try do
-  #     to_string(:io_lib.format(fmt, list))
-  #   rescue
-  #     _ ->
-  #       Logger.info("Invalid format API reason: #{inspect(fmt)}, #{inspect(list)}}~p")
-  #       ""
-  #   end
-  # end
 
   defimpl String.Chars, for: Status do
     def to_string(%Status{status: status, info: info, code: code}),
       do: "<STATUS #{status} (#{code}): #{info}>"
   end
-
-  # case user_status do
-  #   {status, _}
-  #   when status in [
-  #          :badarg,
-  #          :badarith,
-  #          :function_clause,
-  #          :if_clause,
-  #          :undef,
-  #          :timeout_value,
-  #          :noproc,
-  #          :system_limit
-  #        ] ->
-  #     status_internal(srv_id, user_status)
-
-  #   {{status, _}, _}
-  #   when status in [:badmatch, :case_clause, :try_clause, :badfun, :badarity, :nocatch] ->
-  #     status_internal(srv_id, user_status)
 end

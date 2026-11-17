@@ -129,22 +129,6 @@ defmodule Malla.Plugins.Request do
   ## Request Callbacks
   ## ===================================================================
 
-  # @doc """
-  # This callback will be called when a incoming request reaches
-  # your service (see `Malla.Request`).
-
-  # You must implement it for your supported requests.
-  # Default implementation here shows an error message and returns
-  # `{:error, :request_not_implemented}`
-  # """
-  # @callback request([:atom] | String.t(), map, keyword) ::
-  #             :ok | :created | {:ok | :created, map} | {:error | :status, term}
-
-  # defcb request(op, _params, _opts) do
-  #   Logger.warning("Request #{inspect(op)} not implemented")
-  #   {:error, :request_not_implemented}
-  # end
-
   @doc """
   Default implementation for incoming requests.
 

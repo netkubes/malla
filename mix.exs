@@ -9,7 +9,10 @@ defmodule Malla.MixProject do
       description: "Framework for developing distributed services in Elixir networks.",
       package: %{
         licenses: ["Apache-2.0"],
-        links: %{"GitHub" => "https://github.com/netkubes/malla"},
+        links: %{
+          "GitHub" => "https://github.com/netkubes/malla",
+          "Changelog" => "https://hexdocs.pm/malla/changelog.html"
+        },
         files: ~w(lib priv/ai .formatter.exs mix.exs README.md LICENSE.md CHANGELOG.md)
       },
       docs: [
@@ -114,7 +117,8 @@ defmodule Malla.MixProject do
       ],
       Runtime: [
         Malla.Config,
-        Malla.Registry
+        Malla.Registry,
+        Malla.Util
       ],
       Plugins: [
         Malla.Request,

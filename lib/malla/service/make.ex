@@ -369,25 +369,4 @@ defmodule Malla.Service.Make do
       end
     )
   end
-
-  # ## ===================================================================
-  # ## Set config
-  # ## ===================================================================
-
-  # def set_config(%Service{id: srv_id} = service, use_spec) do
-  #   base = Keyword.drop(use_spec, [:class, :vsn, :global, :paused, :plugins, :otp_app])
-
-  #   config =
-  #     case Keyword.get(use_spec, :otp_app) do
-  #       nil ->
-  #         base
-
-  #       # if otp_app is defined, it will be merged over compiled config
-  #       otp_app ->
-  #         app_config = Application.get_env(otp_app, srv_id, [])
-  #         Keyword.merge(base, app_config)
-  #     end
-
-  #   %Service{service | config: config}
-  # end
 end

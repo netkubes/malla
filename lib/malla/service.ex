@@ -202,6 +202,7 @@ defmodule Malla.Service do
     After the update we will call `c:Malla.Plugin.plugin_updated/3` for existing plugins.
     If a plugin does not implement it, it won't notice the update.
   """
+  @spec reconfigure(Malla.id(), keyword) :: :ok | {:error, term}
   def reconfigure(srv_id, update),
     do: GenServer.call(srv_id, {:reconfigure, update}, :infinity)
 
@@ -407,33 +408,14 @@ defmodule Malla.Service do
   @spec drain_all_local() :: boolean
   defdelegate drain_all_local(), to: Malla.Service.Server
 
-  # @doc """
-  #   Finds all local running services and tries to drain them.
-  #   For each service, `drain/1` is called. If a service is successful, next one is called.
-
-  #   Services with higher priority will be called last
-
-  # """
-  # @spec drain_all_local() :: boolean
-
-  # def drain_all_local(),
-  #   do:
-  #     get_all_local()
-  #     |> Enum.sort(&(&1.priority < &2.priority))
-  #     |> Enum.map(& &1.id)
-  #     |> drain_all()
-
-  # defp drain_all([]), do: true
-
-  # defp drain_all([id | rest]) do
-  #   if drain(id) do
-  #     Logger.notice("Service #{id} IS DRAINED")
-  #     drain_all(rest)
-  #   else
-  #     Logger.warning("Service #{id} IS NOT DRAINED")
-  #     false
-  #   end
-  # end
+  @doc """
+  Lists the services running on this node: a map per service with its `:id`,
+  `:class`, `:hash` and `:pid`.
+  """
+  @spec get_all_local() :: [
+          %{id: Malla.id(), class: Malla.class(), hash: pos_integer(), pid: pid}
+        ]
+  defdelegate get_all_local(), to: Malla.Service.Server
 
   ## ===================================================================
   ## Use macro

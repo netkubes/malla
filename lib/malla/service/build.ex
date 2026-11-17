@@ -199,10 +199,4 @@ defmodule Malla.Service.Build do
       end
     end
   end
-
-  # def inline_modules(service) do
-  #   for plugin <- service.plugin_chain do
-  #     IO.puts("P: #{inspect(plugin)}")
-  #   end
-  # end
 end

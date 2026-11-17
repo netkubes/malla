@@ -133,8 +133,6 @@ defmodule Malla.Service.Server do
     service = srv_id.service()
 
     %Service{id: ^srv_id, class: class, global: global, start_paused: paused} = service
-    # wait_for_services(service.wait_for_services, 30)
-
     # Extract runtime plugins before processing config
     {runtime_plugins, update} = Keyword.pop(update, :plugins)
 
@@ -821,16 +819,9 @@ defmodule Malla.Service.Server do
     |> Map.put(:callbacks, Enum.map(state.service.callbacks, fn {cb, _} -> cb end))
   end
 
-  # defp do_get_running_info(state) do
-  #   %State{id: srv_id, running_status: running_status, service: %{vsn: vsn}} = state
-  #   # TODO: call callback to get meta status and help the routing decission by client
-  #   data = %{id: srv_id, pid: self(), meta: info}
-  #   {running_status == :running, data}
-  # end
-
   defp do_get_running_info(state) do
     info = do_get_service_info(state) |> Map.drop([:plugins])
-    # TODO: call callback to get meta status and help the routing decission by client
+    # TODO: call callback to get meta status and help the routing decision by client
     data = %{id: info.id, pid: self(), meta: info}
     {info.running_status == :running, data}
   end
@@ -905,22 +896,4 @@ defmodule Malla.Service.Server do
         {:error, e}
     end
   end
-
-  # defp wait_for_services([], _), do: :ok
-
-  # defp wait_for_services([srv_id | rest], tries) when tries > 0 do
-  #   case Malla.Node.get_instances(srv_id) do
-  #     [] ->
-  #       Logger.warning("Waiting for service #{inspect(srv_id)}, #{tries} left")
-  #       Process.sleep(1000)
-  #       wait_for_services([srv_id | rest], tries - 1)
-
-  #     [_ | _] ->
-  #       Logger.notice("Service #{inspect(srv_id)} already available")
-  #       wait_for_services(rest, tries - 1)
-  #   end
-  # end
-
-  # defp wait_for_services([srv_id | _], _),
-  #   do: raise("Timeout waiting for service #{inspect(srv_id)}")
 end

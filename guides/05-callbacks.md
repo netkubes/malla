@@ -243,7 +243,7 @@ Every service has these callbacks, and you can implement them in your service or
 
 | Callback | Purpose | Default |
 | :--- | :--- | :--- |
-| `service_config/1` | Called on start with the merged configuration, before `plugin_config/2`; return `{:ok, config}` or `{:error, reason}` (it is not documented in the API reference) | `{:ok, config}` |
+| `c:Malla.Plugins.Base.service_config/1` | Called on start with the merged configuration, before `plugin_config/2`; return `{:ok, config}` or `{:error, reason}` | `{:ok, config}` |
 | `c:Malla.Plugins.Base.service_status_changed/1` | Called on every running-status change. Return `:cont` | `:ok` |
 | `c:Malla.Plugins.Base.service_is_ready?/0` | Readiness. Return `:cont` if ready, `false` if not | `true` |
 | `c:Malla.Plugins.Base.service_drain/0` | Drain. Return `:cont` if drained, `false` if still working | `true` |

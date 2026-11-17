@@ -19,5 +19,11 @@
 ## -------------------------------------------------------------------
 
 defmodule Malla.Request.ReqError do
+  @moduledoc """
+  Raised by `Malla.Request.request!/4`.
+
+  `:type` is `:service_not_available` (no node runs the service) or
+  `:internal_error` (the call failed or answered outside the request contract).
+  """
   defexception [:type, :message]
 end

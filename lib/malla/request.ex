@@ -147,10 +147,18 @@ defmodule Malla.Request do
   end
 
   @doc """
-    Macro to perform a call to a callback defined in a local or remote service
+  Sends a request to a service, local or remote, written as a function call.
 
-    Must be used as 'remote Service.fun(args), calls Malla.Mode.cb(Service, fun, args)
+  `req MyApp.UserService.get_user(123)` expands to
+  `Malla.Request.request(MyApp.UserService, :get_user, [123])`, and
+  `req MyApp.UserService.get_user(123), timeout: 5000` passes the options as the
+  fourth argument. See `request/4` for what it does and returns.
+
+  The service must be written as a literal module name, in full: aliases are not
+  expanded, and a variable does not match. Import the macro with
+  `use Malla.Request`.
   """
+  defmacro req(call)
 
   defmacro req({{:., _, [{:__aliases__, _, service_list}, fun]}, _, args}) do
     service_id = Module.concat(service_list)
@@ -159,6 +167,11 @@ defmodule Malla.Request do
       Malla.Request.request(unquote(service_id), unquote(fun), unquote(args))
     end
   end
+
+  @doc """
+  Same as `req/1`, with options for `request/4`.
+  """
+  defmacro req(call, opts)
 
   defmacro req({{:., _, [{:__aliases__, _, service_list}, fun]}, _, args}, opts) do
     service_id = Module.concat(service_list)
@@ -174,15 +187,26 @@ defmodule Malla.Request do
   @type req_opt :: Malla.remote_opt() | {:direct, boolean}
 
   @doc """
-  Calls remote request inside a span flow
+  Sends a request to `fun` of `remote_service` inside a `"request-out"` span.
 
-  * Starts a span "request" in defined service and uses cb/3 to call
-    callback `malla_spans_request` in remote service
-  * Trace information will be sent to continue the trace flow
-  * If remote service is not active, see cb/3 for "service_not_available" replies
-  * Call will be sent to remote's request/3 callback
-  * If `direct` is used, the request is called locally, skipping the call to `scallb/4`
-  * Remote request is expected to return specific responses
+  The call goes through `Malla.remote/4` to the `malla_request/3` callback of
+  the target service (see `Malla.Plugins.Request`), which runs `fun` with `args`
+  in its own span. The base span is sent along so the trace continues on the
+  other side.
+
+  Options are those of `Malla.remote/4`, plus:
+
+  * `:direct` - when `true`, calls `malla_request/3` of the target module in
+    this node, without RPC.
+  * `:service_id` - the calling service, when the process has none.
+
+  The called function must answer `:ok`, `:created`, `{:ok, data}`,
+  `{:created, data}` (with a map or list), or `{:error, status}` /
+  `{:status, status}` with a `Malla.Status`. The result is always a two-element
+  tuple: `:ok` and `:created` come back with an empty map, a transport error
+  (such as `:malla_service_not_available` or a remote exception) becomes
+  `{:error, %Malla.Status{}}` through `Malla.Status.public/2`, and any other
+  answer becomes an `"internal_error"` status.
   """
   @spec request(Malla.id(), atom(), [any()], [req_opt()]) ::
           {:ok, map()} | {:created, map()} | {:error, map()} | {:status, map()}
@@ -193,7 +217,6 @@ defmodule Malla.Request do
     start = System.monotonic_time()
 
     span "request-out", service_id: service_id, labels: [operation: fun] do
-      # remote_service = if op == :force_service_error, do: :no_service, else: remote_service
       # Arguments may carry secrets: logged through Malla.Util.redact_args/2
       info(
         "REQ for #{srv} '#{fun}' (#{inspect(Malla.Util.redact_args(fun, args))}) [#{inspect(opts)}]"
@@ -264,8 +287,9 @@ defmodule Malla.Request do
   end
 
   @doc """
-  Works like `req/2` but it will raise exception `ReqError` if an error is produced.
-  `type` in exception can be either :service_not_available or :internal_error
+  Same as `request/4`, but raises `Malla.Request.ReqError` when the service is
+  not available (`type: :service_not_available`) or the answer is an internal
+  error (`type: :internal_error`). Other errors are returned.
   """
 
   @spec request!(Malla.id(), atom(), [any()], [req_opt()]) ::

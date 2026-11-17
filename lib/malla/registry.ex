@@ -39,6 +39,7 @@ defmodule Malla.Registry do
 
       GenServer.start_link(__MODULE__, [], name: Malla.Registry.via("my_name"))
   """
+  @spec via(term) :: {:via, Registry, {Malla.ProcRegistry, term}}
   def via(term), do: {:via, Registry, {Malla.ProcRegistry, term}}
 
   @doc """

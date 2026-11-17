@@ -17,13 +17,13 @@ See `AGENTS.md` in this same directory for the full current API.
 | 3 | `Malla.Plugin.maybe_restart/3` removed | Replace with inline compare |
 | 4 | `Malla.Plugin.merge_config/4` and `merge_config_multi/4` removed | Replace with `plugin_config_merge/3` (lifecycle) |
 | 5 | `service_merge_config/2` chain callback removed | Use `plugin_config_merge/3` |
-| 6 | `Malla.Service.Server.is_live?/is_ready?/drain` moved | `Malla.Service.is_live?/is_ready?/drain`; `drain_all_local/0` stays (by `:priority` since 0.0.1-rc.3) |
-| 7 | `Malla.callback/2,3` deprecated | Use `Malla.local/2,3` |
+| 6 | `Malla.Service.Server` is internal | `Malla.Service.is_live?/1`, `is_ready?/1`, `drain/1`, `drain_all_local/0` (by `:priority` since 0.0.1-rc.3) and `get_all_local/0` |
+| 7 | `Malla.callback/3` deprecated | Use `Malla.local/3` |
 | 8 | `NimbleOptions` no longer transitive via Malla | Declare it directly (also needed for `Malla.Util.validate_app!`) |
 | 9 | Request and call helpers renamed | `sreq` → `Malla.Request.request`, `cb_all_async` → `Malla.Node.call_cb_all(…, timeout: 0)` |
 | 10 | Error atoms prefixed | `:service_not_available` → `:malla_service_not_available` (from `Malla.Node` / `Malla.remote/4`) |
 
-`Malla.put_service_id/1`, `Malla.Service.Server.get_all_local/0`, and the
+`Malla.put_service_id/1` and the
 service-module dispatch syntax (`srv_id.my_callback(args)`) are **unchanged**.
 
 ---
@@ -45,7 +45,8 @@ end
 ```
 
 Applies to services (`use Malla.Service`) and plugins (`use Malla.Plugin`)
-alike. `defcallback` is the legacy name and may emit a warning.
+alike. `defcallback` is the legacy name; it still expands to `defcb`, but it
+is not documented and may be removed.
 
 Lifecycle callbacks (`plugin_config`, `plugin_start`, `plugin_stop`,
 `plugin_updated`, `plugin_config_merge`) are **not** `defcb` — keep them as
@@ -184,12 +185,12 @@ Both are simpler than the old protocol and cover the common cases.
 | `Malla.Service.Server.is_live?(srv_id)` | `Malla.Service.is_live?(srv_id)` |
 | `Malla.Service.Server.is_ready?(srv_id)` | `Malla.Service.is_ready?(srv_id)` |
 | `Malla.Service.Server.drain(srv_id)` | `Malla.Service.drain(srv_id)` |
-| `Malla.Service.Server.drain_all_local()` | _unchanged_, also as `Malla.Service.drain_all_local/0`; drains by each service's `:priority`, lowest first |
-| `Malla.Service.Server.get_all_local()` | _unchanged_ |
+| `Malla.Service.Server.drain_all_local()` | `Malla.Service.drain_all_local/0`; drains by each service's `:priority`, lowest first |
+| `Malla.Service.Server.get_all_local()` | `Malla.Service.get_all_local/0` |
 
 ---
 
-## 7. `Malla.callback/2,3` → `Malla.local/2,3`
+## 7. `Malla.callback/3` → `Malla.local/3`
 
 ```elixir
 # BEFORE
@@ -263,7 +264,7 @@ For each app being migrated:
    - `Malla.Plugin.maybe_restart`
    - `Malla.Plugin.merge_config` / `merge_config_multi`
    - `service_merge_config`
-   - `Malla.Service.Server.is_live?` / `is_ready?` / `drain`
+   - `Malla.Service.Server.` (any function: the module is internal)
    - `sreq` / `sreq!` / `cb_all_async`
    - `:service_not_available` matched on the result of `Malla.Node` or `Malla.remote/4`
    - `Malla.callback(`
@@ -281,7 +282,6 @@ These still work as before — don't touch them:
 
 - `Malla.put_service_id/1` (set service context in process dictionary)
 - Service dispatch via module: `srv_id.my_callback(args)`
-- `Malla.Service.Server.get_all_local/0`
 - `defcb` return values: `:cont | {:cont, [args]} | any_terminal_value`
 - `plugin_start/2` child spec list shape
 - `use Malla.Service, global: true, plugins: [...], vsn: "..."` options

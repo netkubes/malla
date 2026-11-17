@@ -236,8 +236,8 @@ defmodule Malla.Node do
   @doc """
     Launches a request to call a callback defined on a local or remote service.
 
-    It works by using `call/4` but calling special function `c:Malla.Service.Interface.malla_cb_in/3`,
-    that is always defined in remote services.
+    It works by using `call/4` to call an entry point that Malla generates in
+    every service module.
 
     This function will change process group (so that IO is not redirected to caller),
     set _service id_ and call malla callback `c:Malla.Plugins.Base.service_cb_in/3`;
@@ -379,11 +379,6 @@ defmodule Malla.Node do
   ## Internal
   ## ===================================================================
 
-  # @doc "Updates local info for a service"
-  # @spec update_service_info_local({running :: boolean, info :: service_info}) :: :ok
-  # def update_service_info_local({running, info}),
-  #   do: GenServer.cast(__MODULE__, {:set_service_info, running, info})
-
   @doc false
   # Called from a local Server when its config has changed, so we can update all
   # instances on the network immediately, without waiting for the next update
@@ -457,17 +452,8 @@ defmodule Malla.Node do
   # Checks if a dynamic module for the service exists and matches the provided callbacks. If not, creates or updates the module.
   @spec maybe_make_module(Malla.id(), map()) :: :ok
 
-  _ = """
-   For each detected service, we create a module called 'Malla.<SrvId>'
-   On it, a function is added for each callback defined in remote service.
-
-   When calling this functions, if no caller service_id is detected,
-   a call will be made to Malla.Node.cb/3
-
-   If a service is detected, callback service_cb_out/4 will be called.
-   Default implementation is again calling Malla.Node.cb/4
-  """
-
+  # The module gets the name of the service and one function per callback of the
+  # remote service, each calling Malla.remote/4.
   defp maybe_make_module(srv_id, %{callbacks: callbacks}) do
     if function_exported?(srv_id, :__malla_node_callbacks, 0) do
       # Module was already created by us
@@ -495,7 +481,6 @@ defmodule Malla.Node do
   defp do_make_module(srv_id, callbacks) do
     contents =
       quote do
-        # @service_id unquote(srv_id)
         @callbacks unquote(Macro.escape(callbacks))
         def __malla_node_callbacks(), do: @callbacks
         unquote(Malla.Node.make_callbacks())
@@ -534,19 +519,18 @@ defmodule Malla.Node do
     end
   end
 
-  @doc """
-  Precompiles stub modules for services defined in application configuration.
-
-  Reads the `:precompile` config key from `:malla` application and creates
-  stub modules for each service. These stubs will return `{:error, :malla_service_not_available}`
-  until the actual service is discovered.
-
-  Configuration format:
-      config :malla,
-        precompile: [
-          {MyService, [callback1: 0, callback2: 3]}
-        ]
-  """
+  @doc false
+  # Called by Malla.Application at start; configured with `config :malla, :precompile`.
+  # Precompiles stub modules for services defined in application configuration.
+  #
+  # Reads the `:precompile` config key from `:malla` application and creates
+  # stub modules for each service. These stubs will return `{:error, :malla_service_not_available}`
+  # until the actual service is discovered.
+  #
+  #     config :malla,
+  #       precompile: [
+  #         {MyService, [callback1: 0, callback2: 3]}
+  #       ]
   @spec precompile_stubs() :: :ok
   def precompile_stubs() do
     case Malla.Application.get_env(:precompile) do

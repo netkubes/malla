@@ -27,8 +27,8 @@ defmodule Malla.Service.Interface do
   configuring, and querying the service readily available inserted
   in service module.
 
-  Sice they live at ther service module, the service ID is already known
-  (it is the module itself) so you don't need to provide it.
+  Since they live in the service module, the service ID is already known
+  (it is the module itself), so you don't need to provide it.
 
   You cannot override these functions, they are included here only for
   documentation purposes. Use the mechanism detailed in `Malla.Service`
@@ -68,23 +68,18 @@ defmodule Malla.Service.Interface do
   @callback reconfigure(config :: keyword()) :: :ok | {:error, term()}
 
   @doc """
-  Gets current service configuration, or `:unknown` if not started,
+  Gets the current service configuration, or `:unknown` if not started.
   """
   @callback get_config() :: keyword() | :unknown
 
   @doc """
-  Gets current service configurartion, or `:unknown` if not started.
+  Gets the current running status of the service, or `:unknown` if not started.
   """
   @callback get_status() :: Malla.Service.running_status() | :unknown
 
-  @doc """
-  This function is called from functions like `Malla.remote/3` to call services
-  on remote nodes.
-
-  Once it receives the call:
-  * It sets process global leader to :user so that responses are not sent back to caller.
-  * It sets current module as current service in process's dictionary.
-  * It calls callback function `c:Malla.Plugins.Base.service_cb_in/3`.
-  """
+  @doc false
+  # Entry point of `Malla.remote/4` on the node that runs the service: sets the
+  # group leader to :user, puts the module as the service ID and calls
+  # `c:Malla.Plugins.Base.service_cb_in/3`. Called by generated code only.
   @callback malla_cb_in(fun :: atom, args :: list, opts :: keyword) :: any
 end

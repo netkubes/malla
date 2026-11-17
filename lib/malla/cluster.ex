@@ -120,7 +120,6 @@ defmodule Malla.Cluster do
             Logger.info("CONNECTED to #{node}")
 
           _ ->
-            # IO.puts("NOT CONNECTED to #{node}")
             :ok
         end
       end
